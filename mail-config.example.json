@@ -1,0 +1,21 @@
+{
+  "_説明": "このファイルを『mail-config.json』という名前でコピーして値を入れると、allowToに書いた宛先にだけメールが実際に送信されます。ファイルが無い間は、これまでどおりメール管理画面での確認のみ（外部送信なし）です。",
+  "_Gmailの場合": "Googleアカウント→セキュリティ→2段階認証を有効化→『アプリ パスワード』で16桁を発行し、passに入れてください（通常のログインパスワードは使えません）",
+  "enabled": true,
+  "host": "smtp.gmail.com",
+  "port": 465,
+  "user": "kudaka.1228@gmail.com",
+  "pass": "ここにアプリパスワード16桁",
+  "from": "kudaka.1228@gmail.com",
+  "allowTo": [
+    "kudaka.1228@gmail.com"
+  ],
+  "_ホットペッパー連携": "hotpepper.enabled を true にすると、同じGmailの受信箱を毎分チェックし、件名に subjectFilter を含む未読の予約通知メールを解析して台帳に自動反映します（IMAPを有効にしたGmail＋アプリパスワードで動作）",
+  "hotpepper": {
+    "enabled": true,
+    "subjectFilter": "ご予約",
+    "imapHost": "imap.gmail.com",
+    "imapPort": 993
+  },
+  "_サロンボード連動": "サロンボードの予約通知メールの届くアドレスをここに設定すると本番連動になります。通知先が送信用Gmailと別の場合は hotpepper に imapUser / imapPass（そのメールのアプリパスワード）を追加してください"
+}

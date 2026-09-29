@@ -1,0 +1,357 @@
+{
+  "/": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/index.html"
+  },
+  "/menus": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/menus.html"
+  },
+  "/menus/menu": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/menus/menu.html"
+  },
+  "/book": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book.html"
+  },
+  "/book/select-datetime": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/select-datetime.html"
+  },
+  "/book/confirm": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/confirm.html"
+  },
+  "/book/complete": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/complete.html"
+  },
+  "/map": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/map.html"
+  },
+  "/login": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/login.html"
+  },
+  "/menus/": {
+    "status": 308,
+    "contentType": "",
+    "location": "/menus"
+  },
+  "/book/": {
+    "status": 308,
+    "contentType": "",
+    "location": "/book"
+  },
+  "/menus/menu?course=364321-4822671": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/menus/menu/364321-4822671.html"
+  },
+  "/menus/menu?course=364321-4822710": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/menus/menu/364321-4822710.html"
+  },
+  "/menus/menu?course=364321-4822711": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/menus/menu/364321-4822711.html"
+  },
+  "/menus/menu?course=364323-4822664": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/menus/menu/364323-4822664.html"
+  },
+  "/menus/menu?course=364323-4822701": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/menus/menu/364323-4822701.html"
+  },
+  "/menus/menu?course=364323-4822706": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/menus/menu/364323-4822706.html"
+  },
+  "/menus/menu?course=364324-4822705": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/menus/menu/364324-4822705.html"
+  },
+  "/menus/menu?course=364325-4822707": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/menus/menu/364325-4822707.html"
+  },
+  "/menus/menu?course=364326-4822708": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/menus/menu/364326-4822708.html"
+  },
+  "/menus/menu?course=364326-4822709": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/menus/menu/364326-4822709.html"
+  },
+  "/menus/menu?course=364326-4822715": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/menus/menu/364326-4822715.html"
+  },
+  "/menus/menu?course=364326-4823102": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/menus/menu/364326-4823102.html"
+  },
+  "/menus/menu?course=364326-4823112": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/menus/menu/364326-4823112.html"
+  },
+  "/menus/menu?course=364326-4823113": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/menus/menu/364326-4823113.html"
+  },
+  "/menus/menu?course=364326-4823114": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/menus/menu/364326-4823114.html"
+  },
+  "/menus/menu?course=364326-4827938": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/menus/menu/364326-4827938.html"
+  },
+  "/menus/menu?course=364326-4827940": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/menus/menu/364326-4827940.html"
+  },
+  "/menus/menu?course=364326-4893798": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/menus/menu/364326-4893798.html"
+  },
+  "/menus/menu?course=364326-4893799": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/menus/menu/364326-4893799.html"
+  },
+  "/menus/menu?course=364326-4921051": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/menus/menu/364326-4921051.html"
+  },
+  "/menus/menu?course=364327-4822712": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/menus/menu/364327-4822712.html"
+  },
+  "/menus/menu?course=364328-4822716": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/menus/menu/364328-4822716.html"
+  },
+  "/menus/menu?course=364329-4822717": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/menus/menu/364329-4822717.html"
+  },
+  "/menus/menu?course=364331-4822719": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/menus/menu/364331-4822719.html"
+  },
+  "/menus/menu?course=364331-4822720": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/menus/menu/364331-4822720.html"
+  },
+  "/book/select-datetime?courses=364321-4822671": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/select-datetime/364321-4822671.html"
+  },
+  "/book/select-datetime?courses=364321-4822710": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/select-datetime/364321-4822710.html"
+  },
+  "/book/select-datetime?courses=364321-4822711": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/select-datetime/364321-4822711.html"
+  },
+  "/book/select-datetime?courses=364323-4822664": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/select-datetime/364323-4822664.html"
+  },
+  "/book/select-datetime?courses=364323-4822701": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/select-datetime/364323-4822701.html"
+  },
+  "/book/select-datetime?courses=364323-4822706": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/select-datetime/364323-4822706.html"
+  },
+  "/book/select-datetime?courses=364324-4822705": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/select-datetime/364324-4822705.html"
+  },
+  "/book/select-datetime?courses=364325-4822707": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/select-datetime/364325-4822707.html"
+  },
+  "/book/select-datetime?courses=364326-4822708": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/select-datetime/364326-4822708.html"
+  },
+  "/book/select-datetime?courses=364326-4822709": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/select-datetime/364326-4822709.html"
+  },
+  "/book/select-datetime?courses=364326-4822715": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/select-datetime/364326-4822715.html"
+  },
+  "/book/select-datetime?courses=364326-4823102": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/select-datetime/364326-4823102.html"
+  },
+  "/book/select-datetime?courses=364326-4823112": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/select-datetime/364326-4823112.html"
+  },
+  "/book/select-datetime?courses=364326-4823113": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/select-datetime/364326-4823113.html"
+  },
+  "/book/select-datetime?courses=364326-4823114": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/select-datetime/364326-4823114.html"
+  },
+  "/book/select-datetime?courses=364326-4827938": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/select-datetime/364326-4827938.html"
+  },
+  "/book/select-datetime?courses=364326-4827940": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/select-datetime/364326-4827940.html"
+  },
+  "/book/select-datetime?courses=364326-4893798": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/select-datetime/364326-4893798.html"
+  },
+  "/book/select-datetime?courses=364326-4893799": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/select-datetime/364326-4893799.html"
+  },
+  "/book/select-datetime?courses=364326-4921051": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/select-datetime/364326-4921051.html"
+  },
+  "/book/select-datetime?courses=364327-4822712": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/select-datetime/364327-4822712.html"
+  },
+  "/book/select-datetime?courses=364328-4822716": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/select-datetime/364328-4822716.html"
+  },
+  "/book/select-datetime?courses=364329-4822717": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/select-datetime/364329-4822717.html"
+  },
+  "/book/select-datetime?courses=364331-4822719": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/select-datetime/364331-4822719.html"
+  },
+  "/book/select-datetime?courses=364331-4822720": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/book/select-datetime/364331-4822720.html"
+  },
+  "__404__": {
+    "status": 404,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/not-found.html"
+  },
+  "/demo/admin": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/demo-admin.html"
+  },
+  "/admin": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/demo-admin.html"
+  },
+  "/admin-original": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/admin.html"
+  },
+  "/admin/login": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/pm-login.html"
+  },
+  "/admin/mails": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/pm-mails.html"
+  },
+  "/admin/hotpepper": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/pm-hotpepper.html"
+  },
+  "/admin/report": {
+    "file": "pages/pm-report.html",
+    "status": 200,
+    "contentType": "text/html; charset=utf-8"
+  },
+  "/admin/customer": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/pm-customer.html"
+  },
+  "/mypage": {
+    "file": "pages/pm-mypage.html",
+    "status": 200,
+    "contentType": "text/html; charset=utf-8"
+  }
+}

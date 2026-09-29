@@ -1,0 +1,22 @@
+# Fly.io (https://fly.io) 用設定。flyctl launch --copy-config で利用。
+# 予約データは永続ボリューム（fly volumes create salon_data --size 1）に保存する。
+app = "cn-salon-ueno"
+primary_region = "nrt"
+
+[build]
+
+[env]
+  CLOUD = "1"
+  BIND = "0.0.0.0"
+  DEMO_DATA = "/var/data/state.json"
+
+[[mounts]]
+  source = "salon_data"
+  destination = "/var/data"
+
+[http_service]
+  internal_port = 10000
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1

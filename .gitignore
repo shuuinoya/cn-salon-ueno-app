@@ -1,0 +1,5 @@
+.DS_Store
+data/
+mail-config.json
+tls/
+tools/bin/cloudflared

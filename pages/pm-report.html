@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>営業実績 | CNsalon@board</title>
+<link rel="icon" href="/favicon.svg"/>
+<style>
+  /* 本物の管理システムの「営業実績（日次管理）」と同じレイアウト */
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #eee6e0;
+    color: #333;
+    font-family: Arial, "Noto Sans JP", "Hiragino Kaku Gothic ProN", sans-serif;
+    font-size: 14px;
+  }
+  header.top {
+    background: #987050;
+    color: #fff;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  header.top b { font-size: 15px; }
+  header.top a {
+    color: #fff;
+    text-decoration: none;
+    border: 1px solid rgb(255 255 255 / 0.6);
+    border-radius: 3px;
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+  header.top a:hover { background: rgb(255 255 255 / 0.15); }
+  .sheet {
+    background: #f4f4f4;
+    margin: 14px;
+    border: 1px solid #d9d9d9;
+    padding: 26px 22px 40px;
+  }
+  h1 {
+    text-align: center;
+    font-size: 30px;
+    margin: 0 0 26px;
+    letter-spacing: 1px;
+  }
+  h1 svg { vertical-align: -4px; margin-right: 8px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 22px;
+    align-items: start;
+    max-width: 1500px;
+    margin: 0 auto;
+  }
+  .col { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+  .card {
+    background: #fff;
+    border: 1px solid #caa87e;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .card > h2 {
+    margin: 0;
+    background: #f7dfa0;
+    color: #8a6a3a;
+    font-size: 15px;
+    padding: 10px 14px;
+    border-bottom: 1px solid #caa87e;
+  }
+  .card .inner { padding: 16px; }
+  table { width: 100%; border-collapse: collapse; }
+  td {
+    border: 1px solid #ccc;
+    padding: 12px 12px;
+    background: #fff;
+  }
+  td.l { color: #333; }
+  td.v { width: 34%; white-space: nowrap; }
+  td.l label { display: flex; align-items: center; gap: 8px; }
+  td.l .indent { padding-left: 16px; }
+  input[type="checkbox"] { width: 15px; height: 15px; accent-color: #3b82f6; }
+  .plain { margin: 0; }
+  .plain h3 { font-size: 15px; margin: 0 0 8px; }
+  textarea {
+    width: 100%;
+    min-height: 120px;
+    font: inherit;
+    border: 1px solid #bbb;
+    border-radius: 3px;
+    background: #fff;
+    padding: 8px 10px;
+    resize: vertical;
+  }
+  .staffbox {
+    background: #ececec;
+    border: 1px solid #bbb;
+    border-radius: 3px;
+    min-height: 120px;
+    padding: 8px 10px;
+    font-weight: 700;
+    line-height: 1.9;
+    white-space: pre-wrap;
+  }
+  .weather { display: flex; gap: 22px; flex-wrap: wrap; padding: 4px 2px; font-weight: 700; }
+  .weather label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .weather input { width: 16px; height: 16px; accent-color: #e9625b; }
+  select {
+    width: 100%;
+    font: inherit;
+    padding: 9px 10px;
+    border: 1px solid #bbb;
+    border-radius: 3px;
+    background: #fff;
+  }
+  .actions { display: flex; justify-content: flex-end; gap: 16px; margin-top: 6px; }
+  .actions button {
+    font: inherit;
+    font-weight: 700;
+    color: #fff;
+    background: #e9625b;
+    border: none;
+    border-radius: 6px;
+    padding: 13px 22px;
+    cursor: pointer;
+  }
+  .actions button:hover { background: #d45953; }
+  .req { color: #e9625b; }
+  .note { color: #8d8d8d; font-size: 12px; margin: 6px 2px 0; }
+  @media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+  <header class="top">
+    <b>営業実績（操作デモ）</b>
+    <a href="/admin">← 予約台帳へ戻る</a>
+    <a href="/admin/mails">メール管理</a>
+  </header>
+  <div class="sheet">
+    <h1><svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path fill="#111" d="M5 2h14a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1Zm2 4v2h2V6H7Zm4 0v2h6V6h-6Zm-4 4v2h2v-2H7Zm4 0v2h6v-2h-6Zm-4 4v2h2v-2H7Zm4 0v2h6v-2h-6Z"/></svg>営業実績 <span id="title-date"></span> <span id="title-weather"></span></h1>
+    <div class="grid">
+      <!-- 左列 -->
+      <div class="col">
+        <section class="card">
+          <h2>本日の結果</h2>
+          <div class="inner"><table>
+            <tr><td class="l">日次予算（目標）</td><td class="v">0 円</td></tr>
+            <tr><td class="l">総売上（税抜）</td><td class="v"><span data-v="salesNet"></span> 円</td></tr>
+            <tr><td class="l"><label><input type="checkbox" checked> 預かり金（税込）</label></td><td class="v">0 円</td></tr>
+            <tr><td class="l"><label><input type="checkbox" checked> レジ金差異</label></td><td class="v">0 円</td></tr>
+            <tr><td class="l"><label><input type="checkbox" checked> 利益</label></td><td class="v"><span data-v="profit"></span> 円</td></tr>
+          </table></div>
+        </section>
+        <section class="card">
+          <h2>本日の予算達成度</h2>
+          <div class="inner"><table>
+            <tr><td class="l">予算（目標）当月累計</td><td class="v">0 円</td></tr>
+            <tr><td class="l">当月累計売上（税抜）</td><td class="v"><span data-v="cumNet"></span> 円</td></tr>
+            <tr><td class="l"><label><input type="checkbox" checked> 当月累計<br/>　レジ金売上（税込）</label></td><td class="v"><span data-v="cumGross"></span> 円</td></tr>
+            <tr><td class="l">達成度</td><td class="v">0 %</td></tr>
+            <tr><td class="l">進捗率</td><td class="v">0 %</td></tr>
+            <tr><td class="l">当月着地予測（税抜）</td><td class="v"><span data-v="forecast"></span> 円</td></tr>
+          </table></div>
+        </section>
+        <div class="plain">
+          <h3>本日の実施プラン</h3>
+          <textarea id="todayPlan"></textarea>
+        </div>
+        <div class="plain">
+          <h3>本日の振り返り</h3>
+          <textarea id="review"></textarea>
+        </div>
+      </div>
+      <!-- 中央列 -->
+      <div class="col">
+        <section class="card">
+          <h2>本日の来店数</h2>
+          <div class="inner"><table>
+            <tr><td class="l">総来店人数</td><td class="v"><span data-v="visitors"></span> 人</td></tr>
+            <tr><td class="l"><span class="indent">新規顧客数</span></td><td class="v"><span data-v="newCount"></span> 人</td></tr>
+            <tr><td class="l"><span class="indent">リピータ顧客数</span></td><td class="v"><span data-v="repeatCount"></span> 人</td></tr>
+            <tr><td class="l"><span class="indent">指名顧客数</span></td><td class="v"><span data-v="nominated"></span> 人</td></tr>
+            <tr><td class="l">オンライン予約数合計</td><td class="v"><span data-v="online"></span> 件</td></tr>
+            <tr><td class="l">客単価</td><td class="v"><span data-v="avgSpend"></span> 円</td></tr>
+            <tr><td class="l">返客数</td><td class="v">0 人</td></tr>
+          </table></div>
+        </section>
+        <section class="card">
+          <h2>本日のスタッフ提案数</h2>
+          <div class="inner"><table>
+            <tr><td class="l"><label><input type="checkbox" checked> 追加提案数</label></td><td class="v">0 件</td></tr>
+            <tr><td class="l"><label><input type="checkbox" checked> 追加承認数</label></td><td class="v">0 件</td></tr>
+            <tr><td class="l"><label><input type="checkbox" checked> 次回予約提案数</label></td><td class="v">0 件</td></tr>
+            <tr><td class="l"><label><input type="checkbox" checked> 次回予約承認数</label></td><td class="v">0 件</td></tr>
+          </table></div>
+        </section>
+        <section class="card">
+          <h2>本日のシフト状況</h2>
+          <div class="inner"><table>
+            <tr><td class="l">出勤人数</td><td class="v"><span data-v="shiftStaff"></span> 人</td></tr>
+            <tr><td class="l">総シフト時間</td><td class="v"><span data-v="shiftMin"></span> 分</td></tr>
+            <tr><td class="l">総施術時間</td><td class="v"><span data-v="treatMin"></span> 分</td></tr>
+            <tr><td class="l">スタッフ稼働率</td><td class="v"><span data-v="utilization"></span> %</td></tr>
+          </table></div>
+        </section>
+        <section class="card">
+          <h2>本日の天気</h2>
+          <div class="inner">
+            <div class="weather" id="weather">
+              <label><input type="radio" name="w" value="晴れ"> 晴れ</label>
+              <label><input type="radio" name="w" value="曇り"> 曇り</label>
+              <label><input type="radio" name="w" value="雨"> 雨</label>
+              <label><input type="radio" name="w" value="雪"> 雪</label>
+              <label><input type="radio" name="w" value="台風"> 台風</label>
+            </div>
+          </div>
+        </section>
+      </div>
+      <!-- 右列 -->
+      <div class="col">
+        <section class="card">
+          <h2>明日の予算</h2>
+          <div class="inner"><table>
+            <tr><td class="l">日次予算（目標）</td><td class="v">0 円</td></tr>
+            <tr><td class="l">売上予測（税抜）</td><td class="v">0 円</td></tr>
+            <tr><td class="l">差異</td><td class="v">0 円</td></tr>
+          </table></div>
+        </section>
+        <section class="card">
+          <h2>明日の予定</h2>
+          <div class="inner"><table>
+            <tr><td class="l">総来店人数</td><td class="v"><span data-t="visitors"></span> 人</td></tr>
+            <tr><td class="l"><span class="indent">新規顧客数</span></td><td class="v"><span data-t="newCount"></span> 人</td></tr>
+            <tr><td class="l"><span class="indent">リピータ顧客数</span></td><td class="v"><span data-t="repeatCount"></span> 人</td></tr>
+            <tr><td class="l"><span class="indent">指名顧客数</span></td><td class="v"><span data-t="nominated"></span> 人</td></tr>
+            <tr><td class="l">オンライン予約数合計</td><td class="v"><span data-t="online"></span> 件</td></tr>
+          </table></div>
+        </section>
+        <div class="plain">
+          <h3>明日の実施プラン</h3>
+          <textarea id="tomorrowPlan"></textarea>
+        </div>
+        <div class="plain">
+          <h3>明日の出勤スタッフ</h3>
+          <div class="staffbox" id="staffbox"></div>
+        </div>
+        <section class="card">
+          <h2>担当者<span class="req">*</span></h2>
+          <div class="inner">
+            <select id="manager"><option value=""></option></select>
+          </div>
+        </section>
+        <div class="actions">
+          <button type="button" id="save">一時保存</button>
+          <button type="button" id="send">日報送信</button>
+        </div>
+        <p class="note">操作デモ：数値は予約台帳・シフトの実データから自動集計されます（数秒ごとに更新）。</p>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+  const WEEK = ["日", "月", "火", "水", "木", "金", "土"];
+  const today = new Date(Date.now() + 32400000 - 10800000).toISOString().slice(0, 10);
+  const fmt = (n) => Number(n || 0).toLocaleString("ja-JP");
+  let loadedSaved = false;
+
+  const titleDate = () => {
+    const [y, m, d] = today.split("-").map(Number);
+    const w = WEEK[new Date(today + "T00:00:00Z").getUTCDay()];
+    return y + "年" + m + "月" + d + "日 (" + w + ")";
+  };
+  document.getElementById("title-date").textContent = titleDate();
+
+  async function load() {
+    try {
+      const r = await fetch("/api/demo/report?date=" + today, { cache: "no-store" });
+      const data = await r.json();
+      for (const el of document.querySelectorAll("[data-v]")) el.textContent = fmt(data.today[el.dataset.v]);
+      for (const el of document.querySelectorAll("[data-t]")) el.textContent = fmt(data.tomorrow[el.dataset.t]);
+      document.getElementById("staffbox").textContent =
+        data.tomorrow.shifts.map((s) => s.name + "（" + s.label + "）").join("\n") || "（明日のシフトは未登録です）";
+      // 担当者の選択肢
+      const sel = document.getElementById("manager");
+      if (sel.options.length <= 1) {
+        for (const n of data.staffNames) {
+          const o = document.createElement("option");
+          o.textContent = n;
+          sel.appendChild(o);
+        }
+      }
+      // 保存済みの入力内容は初回だけ反映（入力中に上書きしない）
+      if (!loadedSaved) {
+        loadedSaved = true;
+        const s = data.saved || {};
+        for (const k of ["todayPlan", "review", "tomorrowPlan"]) {
+          if (s[k]) document.getElementById(k).value = s[k];
+        }
+        if (s.manager) sel.value = s.manager;
+        const w = s.weather || "晴れ";
+        const radio = document.querySelector('.weather input[value="' + w + '"]');
+        if (radio) radio.checked = true;
+        document.getElementById("title-weather").textContent = w;
+      }
+    } catch {}
+  }
+
+  document.getElementById("weather").addEventListener("change", (e) => {
+    document.getElementById("title-weather").textContent = e.target.value;
+  });
+
+  async function post(send) {
+    const body = {
+      date: today,
+      weather: document.querySelector('.weather input:checked')?.value || "",
+      todayPlan: document.getElementById("todayPlan").value,
+      review: document.getElementById("review").value,
+      tomorrowPlan: document.getElementById("tomorrowPlan").value,
+      manager: document.getElementById("manager").value,
+    };
+    if (send) {
+      if (!body.manager) { alert("担当者を選択してください。"); return; }
+      body.send = true;
+    }
+    try {
+      const r = await fetch("/api/demo/report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error();
+      alert(send ? "日報を送信しました（デモ）。" : "一時保存しました。");
+    } catch {
+      alert("保存できませんでした。接続を確認してください。");
+    }
+  }
+  document.getElementById("save").addEventListener("click", () => post(false));
+  document.getElementById("send").addEventListener("click", () => post(true));
+
+  load();
+  setInterval(load, 8000);
+})();
+</script>
+</body>
+</html>

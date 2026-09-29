@@ -1,0 +1,6 @@
+.git
+data
+tls
+mail-config.json
+tools/bin/cloudflared
+*.log

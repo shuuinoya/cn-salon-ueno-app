@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>マイページ | CN Ueno health & beauty</title>
+<link rel="icon" href="/favicon.svg"/>
+<style>
+  /* 予約サイトと同じトーンのマイページ（画像のレイアウトに合わせた構成） */
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #f3f4f6;
+    color: #1f2937;
+    font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", Arial, sans-serif;
+    font-size: 15px;
+  }
+  header.site {
+    background: #fff;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 20px;
+  }
+  header.site img { width: 46px; height: 46px; object-fit: cover; border-radius: 4px; }
+  header.site b { font-size: 17px; }
+  header.site nav { margin-left: auto; display: flex; align-items: center; gap: 28px; }
+  header.site nav a { color: #4b5563; text-decoration: none; font-size: 13px; font-weight: 700; line-height: 1; }
+  header.site nav a:hover { color: #b08d4f; }
+  .tabs {
+    display: flex;
+    gap: 22px;
+    padding: 14px 24px 0;
+    font-weight: 600;
+    color: #9ca3af;
+  }
+  .tabs a {
+    color: inherit;
+    text-decoration: none;
+    padding-bottom: 8px;
+    border-bottom: 2px solid transparent;
+  }
+  .tabs a.active { color: #b08d4f; border-bottom-color: #b08d4f; }
+  main { max-width: 980px; padding: 16px 24px 60px; }
+  .card {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
+    margin-bottom: 18px;
+    overflow: hidden;
+  }
+  .card h2 {
+    font-size: 15px;
+    margin: 0;
+    padding: 16px 22px;
+    border-bottom: 1px solid #eceef1;
+  }
+  .rowline {
+    display: flex;
+    align-items: center;
+    gap: 26px;
+    padding: 17px 22px;
+    border-bottom: 1px solid #eceef1;
+  }
+  .rowline:last-child { border-bottom: none; }
+  .rowline .k { color: #374151; font-weight: 600; min-width: 84px; }
+  .badge {
+    display: inline-block;
+    color: #fff;
+    background: #b08d4f;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 5px 16px;
+  }
+  .badge.gray { background: #9ca3af; }
+  .when { font-size: 17px; font-weight: 700; }
+  .btnrow { display: flex; justify-content: center; padding: 18px; }
+  .gold {
+    font: inherit;
+    background: #c5a15e;
+    color: #fff;
+    font-weight: 700;
+    border: none;
+    border-radius: 6px;
+    padding: 12px 34px;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+  }
+  .gold:hover { background: #b8934f; }
+  .cancel {
+    font: inherit;
+    color: #e0483e;
+    background: #fdf3f2;
+    border: 1px solid #e9a29c;
+    border-radius: 6px;
+    font-weight: 700;
+    padding: 12px 30px;
+    cursor: pointer;
+  }
+  .cancel:hover { background: #fbe6e4; }
+  .empty { color: #6b7280; padding: 26px 22px; }
+  @media (max-width: 640px) {
+    header.site nav { display: none; }
+    main { padding: 12px 12px 40px; }
+    .rowline { gap: 14px; }
+  }
+</style>
+</head>
+<body>
+  <header class="site">
+    <img src="/images/logo.jpg.webp" alt=""/>
+    <b>CN Ueno health &amp; beauty</b>
+    <nav>
+      <a href="/" id="nav-home">ホーム</a>
+      <a href="/book" id="nav-book">予約</a>
+      <a href="/menus" id="nav-menu">メニュー</a>
+    </nav>
+  </header>
+  <div class="tabs">
+    <a href="#home" id="tab-home">ホーム</a>
+    <a href="#resv" id="tab-resv">予約情報</a>
+    <a href="#member" id="tab-member">会員情報</a>
+    <a href="#tickets" id="tab-tickets">回数券</a>
+  </div>
+  <main id="main"></main>
+
+<script>
+(function () {
+  "use strict";
+  // ---- 多言語（予約時の言語で表示・取消できる） ----
+  const L = {
+    ja: { home: "ホーム", resv: "予約情報", member: "会員情報", booked: "予約中", cancelled: "取消済み",
+      menu: "メニュー", total: "合計", cancelBtn: "予約取消", name: "お名前",
+      confirm: "この予約を取り消しますか？", done: "予約を取り消しました。", fail: "取消できませんでした。時間をおいてお試しください。",
+      empty: "表示できる予約がありません。予約完了ページの「マイページへ」から、このブラウザに予約が登録されます。",
+      yen: (n) => n.toLocaleString("ja-JP") + "円",
+      date: (d, hm) => { const [y, m, dd] = d.split("-").map(Number); const w = "日月火水木金土"[new Date(d + "T00:00:00Z").getUTCDay()]; return y + "年" + m + "月" + dd + "日（" + w + "）　" + hm; } },
+    en: { home: "Home", resv: "Bookings", member: "Member info", booked: "Booked", cancelled: "Cancelled",
+      menu: "Menu", total: "Total", cancelBtn: "Cancel booking", name: "Name",
+      confirm: "Cancel this booking?", done: "Your booking has been cancelled.", fail: "Could not cancel. Please try again later.",
+      empty: "No bookings to show. Bookings are saved to this browser from the booking-complete page.",
+      yen: (n) => "¥" + n.toLocaleString("en-US"),
+      date: (d, hm) => new Date(d + "T00:00:00+09:00").toLocaleDateString("en-US", { weekday: "short", year: "numeric", month: "short", day: "numeric" }) + "  " + hm },
+    zh: { home: "首页", resv: "预约信息", member: "会员信息", booked: "已预约", cancelled: "已取消",
+      menu: "项目", total: "合计", cancelBtn: "取消预约", name: "姓名",
+      confirm: "确定要取消这个预约吗？", done: "预约已取消。", fail: "取消失败，请稍后再试。",
+      empty: "没有可显示的预约。预约完成页面的「我的页面」会把预约保存到本浏览器。",
+      yen: (n) => "¥" + n.toLocaleString("zh-CN"),
+      date: (d, hm) => new Date(d + "T00:00:00+09:00").toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "short" }) + "  " + hm },
+    ko: { home: "홈", resv: "예약 정보", member: "회원 정보", booked: "예약중", cancelled: "취소됨",
+      menu: "메뉴", total: "합계", cancelBtn: "예약 취소", name: "이름",
+      confirm: "이 예약을 취소하시겠습니까?", done: "예약이 취소되었습니다.", fail: "취소하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+      empty: "표시할 예약이 없습니다. 예약 완료 페이지의 '마이페이지'에서 이 브라우저에 저장됩니다.",
+      yen: (n) => "¥" + n.toLocaleString("ko-KR"),
+      date: (d, hm) => new Date(d + "T00:00:00+09:00").toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "short" }) + "  " + hm },
+    fr: { home: "Accueil", resv: "Réservations", member: "Infos membre", booked: "Réservé", cancelled: "Annulé",
+      menu: "Soin", total: "Total", cancelBtn: "Annuler la réservation", name: "Nom",
+      confirm: "Annuler cette réservation ?", done: "Votre réservation a été annulée.", fail: "Échec de l'annulation. Réessayez plus tard.",
+      empty: "Aucune réservation à afficher. Les réservations sont enregistrées dans ce navigateur depuis la page de confirmation.",
+      yen: (n) => "¥" + n.toLocaleString("fr-FR"),
+      date: (d, hm) => new Date(d + "T00:00:00+09:00").toLocaleDateString("fr-FR", { weekday: "short", year: "numeric", month: "long", day: "numeric" }) + "  " + hm },
+    es: { home: "Inicio", resv: "Reservas", member: "Datos de socio", booked: "Reservado", cancelled: "Cancelado",
+      menu: "Tratamiento", total: "Total", cancelBtn: "Cancelar la reserva", name: "Nombre",
+      confirm: "¿Cancelar esta reserva?", done: "Su reserva ha sido cancelada.", fail: "No se pudo cancelar. Inténtelo más tarde.",
+      empty: "No hay reservas que mostrar. Las reservas se guardan en este navegador desde la página de confirmación.",
+      yen: (n) => "¥" + n.toLocaleString("es-ES"),
+      date: (d, hm) => new Date(d + "T00:00:00+09:00").toLocaleDateString("es-ES", { weekday: "short", year: "numeric", month: "long", day: "numeric" }) + "  " + hm },
+    it: { home: "Home", resv: "Prenotazioni", member: "Dati socio", booked: "Prenotato", cancelled: "Annullato",
+      menu: "Trattamento", total: "Totale", cancelBtn: "Annulla la prenotazione", name: "Nome",
+      confirm: "Annullare questa prenotazione?", done: "La prenotazione è stata annullata.", fail: "Impossibile annullare. Riprova più tardi.",
+      empty: "Nessuna prenotazione da mostrare. Le prenotazioni vengono salvate in questo browser dalla pagina di conferma.",
+      yen: (n) => "¥" + n.toLocaleString("it-IT"),
+      date: (d, hm) => new Date(d + "T00:00:00+09:00").toLocaleDateString("it-IT", { weekday: "short", year: "numeric", month: "long", day: "numeric" }) + "  " + hm },
+    de: { home: "Start", resv: "Reservierungen", member: "Mitgliedsdaten", booked: "Reserviert", cancelled: "Storniert",
+      menu: "Behandlung", total: "Gesamt", cancelBtn: "Reservierung stornieren", name: "Name",
+      confirm: "Diese Reservierung stornieren?", done: "Ihre Reservierung wurde storniert.", fail: "Stornierung fehlgeschlagen. Bitte später erneut versuchen.",
+      empty: "Keine Reservierungen vorhanden. Reservierungen werden über die Bestätigungsseite in diesem Browser gespeichert.",
+      yen: (n) => "¥" + n.toLocaleString("de-DE"),
+      date: (d, hm) => new Date(d + "T00:00:00+09:00").toLocaleDateString("de-DE", { weekday: "short", year: "numeric", month: "long", day: "numeric" }) + "  " + hm },
+  };
+  const norm = (l) => (String(l || "").toLowerCase().startsWith("zh") ? "zh" : ["en", "ko", "zh", "ja", "fr", "es", "it", "de"].includes(String(l || "").slice(0, 2)) ? String(l).slice(0, 2) : "ja");
+  const q = new URLSearchParams(location.search);
+  let pageLang = norm(q.get("lang") || localStorage.getItem("fm-lang") || "ja");
+  const T = () => L[pageLang] || L.ja;
+
+  const MYKEY = "cn-mypage";
+  const store = () => { try { return JSON.parse(localStorage.getItem(MYKEY) || "[]"); } catch { return []; } };
+  const saveStore = (list) => { try { localStorage.setItem(MYKEY, JSON.stringify(list.slice(-20))); } catch {} };
+  // 回数券（購入時に発行されるid+tokenの組。表示内容は毎回サーバーから取得する）
+  const TKKEY = "cn-tickets";
+  const tkStore = () => { try { return JSON.parse(localStorage.getItem(TKKEY) || "[]"); } catch { return []; } };
+  const tkSave = (list) => { try { localStorage.setItem(TKKEY, JSON.stringify(list.slice(-30))); } catch {} };
+
+  // メールの取消リンク（/mypage?id=..&token=..）から来た場合は登録して表示
+  if (q.get("id") && q.get("token")) {
+    const list = store().filter((x) => x.id !== q.get("id"));
+    list.push({ id: q.get("id"), token: q.get("token"), name: "", lang: pageLang });
+    saveStore(list);
+  }
+
+  const hm = (ms) => {
+    const d = new Date(ms + 9 * 3600e3);
+    return String(d.getUTCHours()).padStart(2, "0") + ":" + String(d.getUTCMinutes()).padStart(2, "0");
+  };
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  let rows = []; // {entry, bk}
+  let myTickets = [];
+  let ticketPlans = [];
+  async function loadTickets() {
+    myTickets = [];
+    try {
+      const items = tkStore();
+      if (items.length) {
+        const r = await fetch("/api/tickets/mine", { method: "POST",
+          headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items }), cache: "no-store" });
+        myTickets = (await r.json()).tickets || [];
+      }
+    } catch {}
+    try {
+      ticketPlans = (await (await fetch("/api/tickets/plans", { cache: "no-store" })).json()).plans || [];
+    } catch {}
+  }
+  async function loadAll() {
+    await loadTickets();
+    const list = store();
+    rows = [];
+    for (const entry of list) {
+      try {
+        const r = await fetch("/api/bookings?id=" + encodeURIComponent(entry.id), {
+          headers: { Authorization: "Bearer " + entry.token }, cache: "no-store" });
+        if (!r.ok) continue;
+        const j = await r.json();
+        rows.push({ entry, bk: j.booking });
+      } catch {}
+    }
+    rows.sort((a, b) => b.bk.start - a.bk.start);
+    if (!q.get("lang") && rows[0]) pageLang = norm(localStorage.getItem("fm-lang") || rows[0].bk.language);
+  }
+
+  function bookingCard(row, withButtons) {
+    const t = L[norm(row.bk.language)] || T();
+    const cancelled = row.bk.status !== "confirmed";
+    return '<div class="card" data-id="' + esc(row.entry.id) + '">' +
+      '<div class="rowline"><span class="badge' + (cancelled ? " gray" : "") + '">' + (cancelled ? t.cancelled : t.booked) + "</span>" +
+      '<span class="when">' + t.date(row.bk.serviceDate, hm(row.bk.start)) + "</span></div>" +
+      '<div class="rowline"><span class="k">' + t.menu + "</span><span>" + esc(row.bk.courseName) + "</span></div>" +
+      '<div class="rowline"><span class="k">' + t.total + "</span><span>" + t.yen(row.bk.total) + "</span></div>" +
+      (row.bk.ticket_name
+        ? '<div class="rowline"><span class="k">回数券</span><span>' + esc(row.bk.ticket_name) + "（残り " + (row.bk.ticket_left_after ?? "-") + "回）</span></div>"
+        : "") +
+      (withButtons && !cancelled && row.bk.start > Date.now()
+        ? '<div class="btnrow"><button type="button" class="cancel" data-cancel="' + esc(row.entry.id) + '">' + t.cancelBtn + "</button></div>"
+        : "") +
+      "</div>";
+  }
+
+  function render() {
+    const t = T();
+    document.getElementById("tab-home").textContent = t.home;
+    document.getElementById("tab-resv").textContent = t.resv;
+    document.getElementById("tab-member").textContent = t.member;
+    document.getElementById("nav-home").textContent = t.home;
+    document.getElementById("tab-tickets").textContent = pageLang === "en" ? "Tickets" : "回数券";
+    const tab = (location.hash || "#home").slice(1);
+    for (const id of ["home", "resv", "member", "tickets"]) {
+      document.getElementById("tab-" + id).classList.toggle("active", tab === id);
+    }
+    const main = document.getElementById("main");
+    const name = store().map((x) => x.name).filter(Boolean).pop() || "";
+    if (tab === "tickets") {
+      main.innerHTML = ticketsView();
+      return;
+    }
+    if (!rows.length && tab !== "member") {
+      main.innerHTML = '<div class="card"><p class="empty">' + t.empty + "</p></div>";
+      return;
+    }
+    if (tab === "home") {
+      const latest = rows.find((r) => r.bk.status === "confirmed") || rows[0];
+      main.innerHTML =
+        '<div class="card"><h2>' + t.resv + "</h2>" +
+        (latest
+          ? bookingCard(latest, false).replace('<div class="card"', '<div class="card" style="box-shadow:none;margin:0"') +
+            '<div class="btnrow"><a class="gold" href="#resv">' + t.resv + "</a></div>"
+          : '<p class="empty">' + t.empty + "</p>") +
+        "</div>" +
+        '<div class="card"><h2>' + t.member + "</h2>" +
+        '<div class="rowline"><span class="k">' + t.name + "</span><span>" + esc(name) + "</span></div>" +
+        '<div class="btnrow"><a class="gold" href="#member">' + t.member + "</a></div></div>" +
+        '<div class="card"><h2>回数券</h2>' +
+        (myTickets.length
+          ? myTickets.map((tk) => '<div class="rowline"><span class="k">' + esc(tk.plan_name) + '</span><span>残り ' + tk.uses_left + "回</span></div>").join("")
+          : '<p class="empty">お得な回数券をご用意しています。</p>') +
+        '<div class="btnrow"><a class="gold" href="#tickets">回数券を見る</a></div></div>';
+    } else if (tab === "resv") {
+      main.innerHTML = rows.map((r) => bookingCard(r, true)).join("");
+    } else {
+      main.innerHTML =
+        '<div class="card"><h2>' + t.member + "</h2>" +
+        '<div class="rowline"><span class="k">' + t.name + "</span><span>" + esc(name) + "</span></div></div>";
+    }
+  }
+
+  const jd = (iso) => String(iso || "").slice(0, 10);
+  function ticketsView() {
+    const own = myTickets.map((tk) => {
+      const stCls = tk.status === "有効" ? "" : " gray";
+      return '<div class="card">' +
+        '<div class="rowline"><span class="badge' + stCls + '">' + esc(tk.status) + '</span><span class="when">' + esc(tk.plan_name) + "</span></div>" +
+        '<div class="rowline"><span class="k">購入日</span><span>' + jd(tk.purchased_at) + "</span></div>" +
+        '<div class="rowline"><span class="k">利用可能回数</span><span>' + tk.uses_total + "回</span></div>" +
+        '<div class="rowline"><span class="k">残り回数</span><span><b style="font-size:16px">' + tk.uses_left + '回</b>（利用済み ' + tk.used + "回）</span></div>" +
+        '<div class="rowline"><span class="k">有効期限</span><span>' + (tk.expires_label || jd(new Date(tk.expires_at + 9 * 3600e3).toISOString())) + "</span></div>" +
+        "</div>";
+    }).join("");
+    const plans = ticketPlans.map((pl) =>
+      '<div class="card">' +
+      '<div class="rowline"><span class="when">' + esc(pl.name) + '</span><span><b>' + pl.price.toLocaleString("ja-JP") + "円</b></span></div>" +
+      '<div class="rowline"><span class="k">' + pl.uses + "回分／有効期限は購入日から1年間</span></div>" +
+      '<p class="empty" style="margin:6px 0">' + esc(pl.description || "") + "</p>" +
+      '<div class="btnrow"><button type="button" class="gold" style="border:0;cursor:pointer" data-buy="' + esc(pl.id) + '">この回数券を購入</button></div>' +
+      "</div>").join("");
+    // 会員（ご予約実績のある方）だけが購入できる。非会員には案内と導線を出す
+    const member = store().length > 0 || myTickets.length > 0;
+    if (!member) {
+      return '<div class="card"><h2>回数券</h2>' +
+        '<p class="empty" style="margin:0 0 10px">回数券のご利用には会員登録が必要です。<br>当店では、ご予約の完了をもって会員登録となります（登録費無料）。</p>' +
+        '<div class="btnrow"><a class="gold" href="/book">ご予約（会員登録）はこちら</a></div></div>';
+    }
+    return '<div class="card"><h2>保有中の回数券</h2>' +
+      (own || '<p class="empty">保有中の回数券はありません。</p>') + "</div>" +
+      '<div class="card"><h2>回数券のご購入</h2>' +
+      '<p class="empty" style="margin:0 0 8px">お支払いは店頭にて承ります。ご予約時に「回数券を使用する」を選ぶと、1回のご予約で1回分を使用します。有効期限はどの券も購入日から1年間です。</p>' +
+      (plans || '<p class="empty">現在販売中の回数券はありません。</p>') + "</div>";
+  }
+
+  document.addEventListener("click", async (e) => {
+    const buyId = e.target.closest("[data-buy]")?.dataset.buy;
+    if (buyId) {
+      const defName = store().map((x) => x.name).filter(Boolean).pop() || "";
+      const nm = window.prompt("お名前を入力してください", defName);
+      if (!nm) return;
+      const em = window.prompt("メールアドレスを入力してください（ご予約時と同じアドレス）", "");
+      if (!em) return;
+      try {
+        const r = await fetch("/api/tickets/purchase", { method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ planId: buyId, name: nm.trim(), email: em.trim() }) });
+        const j = await r.json();
+        if (!r.ok || !j.ok) {
+          if (j.error === "memberOnly") {
+            window.alert("回数券のご購入には会員登録（ご予約実績）が必要です。\nご予約時と同じメールアドレスをご入力ください。");
+            return;
+          }
+          throw new Error(j.error || "purchase");
+        }
+        tkSave([...tkStore(), { id: j.ticket.id, token: j.ticket.token }]);
+        window.alert("回数券を購入しました。お支払いは店頭にて承ります。\n残り回数：" + j.ticket.uses_left + "回");
+      } catch {
+        window.alert("購入できませんでした。入力内容をご確認ください。");
+        return;
+      }
+      await loadTickets();
+      render();
+      return;
+    }
+    const id = e.target.closest("[data-cancel]")?.dataset.cancel;
+    if (!id) return;
+    const row = rows.find((r) => r.entry.id === id);
+    if (!row) return;
+    const t = L[norm(row.bk.language)] || T(); // 予約したときの言語で確認・完了を表示
+    if (!window.confirm(t.confirm)) return;
+    try {
+      const r = await fetch("/api/bookings/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + row.entry.token },
+        body: JSON.stringify({ id }),
+      });
+      if (!r.ok) throw new Error("cancel");
+      window.alert(t.done);
+    } catch {
+      window.alert(t.fail);
+      return;
+    }
+    await loadAll();
+    render();
+  });
+  window.addEventListener("hashchange", render);
+
+  loadAll().then(render);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>CNsalon@board</title>
+<link rel="icon" href="/favicon.svg"/>
+<style>
+  /* 本物の管理システム（PeakManager）のログイン画面と同じレイアウト */
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #eee6e0;
+    font-family: Arial, "Noto Sans JP", "Hiragino Kaku Gothic ProN", sans-serif;
+    color: #292929;
+    -webkit-font-smoothing: antialiased;
+  }
+  .login-card {
+    width: 476px;
+    max-width: calc(100% - 32px);
+    margin: 128px auto 56px;
+    background: #fff;
+    border-radius: 6px;
+    padding: 44px 44px 40px;
+  }
+  .login-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 30px;
+  }
+  .login-logo svg { width: 44px; height: 44px; }
+  .login-logo b {
+    font-size: 34px;
+    color: #987050;
+    letter-spacing: 0.5px;
+  }
+  label {
+    display: block;
+    font-size: 15px;
+    margin: 18px 0 8px;
+  }
+  input {
+    width: 100%;
+    height: 46px;
+    font-size: 16px;
+    padding: 0 12px;
+    border: 1px solid #aaa;
+    border-radius: 4px;
+    background: #fff;
+  }
+  input:focus {
+    outline: 2px solid #b9694b;
+    outline-offset: 1px;
+  }
+  .logout-msg {
+    color: #d45953;
+    font-size: 15px;
+    margin: 18px 0 0;
+    display: none;
+  }
+  .logout-msg.show { display: block; }
+  .login-btn {
+    display: block;
+    width: 100%;
+    height: 56px;
+    margin-top: 22px;
+    background: #e9625b;
+    color: #fff;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 6px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .login-btn:hover { background: #d45953; }
+  .support {
+    text-align: center;
+    font-size: 15px;
+    line-height: 2;
+    color: #292929;
+  }
+  .support .chips {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-weight: 700;
+  }
+  .chip {
+    font-weight: 400;
+    font-size: 12px;
+    border: 1px solid #999;
+    border-radius: 999px;
+    padding: 1px 12px;
+    color: #555;
+  }
+  .support .note { font-size: 13px; }
+  .copyright {
+    text-align: center;
+    font-weight: 700;
+    font-size: 15px;
+    margin: 26px 0 40px;
+  }
+</style>
+</head>
+<body>
+  <form class="login-card" id="login-form">
+    <div class="login-logo">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#987050" d="M12 12C-3 13 0-3 9 1c3 1 3 7 3 11ZM12 12C11-3 27 0 23 9c-1 3-7 3-11 3ZM12 12c15-1 12 15 3 11-3-1-3-7-3-11ZM12 12c1 15-15 12-11 3 1-3 7-3 11-3Z"/></svg>
+      <b>CNsalon@board</b>
+    </div>
+    <label for="pm-user">ユーザー</label>
+    <input id="pm-user" name="username" autocomplete="username" autofocus/>
+    <label for="pm-pass">パスワード</label>
+    <input id="pm-pass" name="password" type="password" autocomplete="current-password"/>
+    <p class="logout-msg" id="logout-msg">ログアウトしました。</p>
+    <p class="logout-msg" id="login-error">IDまたはパスワードが違います。</p>
+    <button class="login-btn" type="submit">ログイン</button>
+  </form>
+
+  <div class="support">
+    <p>ログインに関するお問い合わせは下記サポート窓口までご連絡ください。</p>
+    <div class="chips">
+      <span class="chip">TEL</span> 0120-206-460
+      <span class="chip">メール</span> pm-support@epark-r.jp
+      <span class="chip">受付時間</span> 平日10:00〜17:00
+    </div>
+    <p class="note">※お問い合わせの際は、ご契約店舗名・店舗電話番号をお伝えください。</p>
+  </div>
+  <p class="copyright">© CNsalon@board 2010-</p>
+
+  <script>
+    // ログアウト経由で来たときだけ赤いメッセージを表示する
+    if (new URLSearchParams(location.search).get("out") === "1") {
+      document.getElementById("logout-msg").classList.add("show");
+    }
+    // セッション切れ（サーバー再起動など）で戻されたときの案内
+    if (new URLSearchParams(location.search).get("exp") === "1") {
+      const m = document.getElementById("logout-msg");
+      m.textContent = "接続が切れました（サーバー再起動など）。もう一度ログインしてください。";
+      m.classList.add("show");
+    }
+    // ログイン（ID・パスワードが一致したときだけ管理画面が開く）
+    // 失敗の理由ごとに正しいメッセージを出す：
+    // ・401＝ID/パスワード違い ・429＝連続失敗による一時ロック（正しい入力でも待ちが必要）
+    document.getElementById("login-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const user = document.getElementById("pm-user").value.trim();
+      const pass = document.getElementById("pm-pass").value;
+      const errEl = document.getElementById("login-error");
+      let msg = "IDまたはパスワードが違います。";
+      try {
+        const r = await fetch("/api/demo/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user, pass }),
+        });
+        if (r.ok) { location.href = "/admin"; return; }
+        if (r.status === 429) {
+          const j = await r.json().catch(() => ({}));
+          const sec = Number(j.retry) > 0 ? Number(j.retry) : 60;
+          msg = "安全のため一時的にロックしています。約" + sec + "秒後にもう一度お試しください。";
+        }
+      } catch {
+        msg = "サーバーに接続できませんでした。サイトの起動を確認してください。";
+      }
+      document.getElementById("logout-msg").classList.remove("show");
+      errEl.textContent = msg;
+      errEl.classList.add("show");
+    });
+  </script>
+</body>
+</html>

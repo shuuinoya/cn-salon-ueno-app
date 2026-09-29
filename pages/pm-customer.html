@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>顧客マスタ | CNsalon@board</title>
+<link rel="icon" href="/favicon.svg"/>
+<style>
+  /* 本物の管理システムの「顧客マスタ」と同じレイアウト */
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #fff;
+    color: #333;
+    font-family: Arial, "Noto Sans JP", "Hiragino Kaku Gothic ProN", sans-serif;
+    font-size: 13px;
+  }
+  header.top {
+    background: #987050;
+    color: #fff;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  header.top b { font-size: 15px; }
+  header.top a {
+    color: #fff;
+    text-decoration: none;
+    border: 1px solid rgb(255 255 255 / 0.6);
+    border-radius: 3px;
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+  header.top a:hover { background: rgb(255 255 255 / 0.15); }
+  .titlebar {
+    background: #f7dfa0;
+    color: #8a6a3a;
+    font-weight: 700;
+    font-size: 14px;
+    padding: 8px 14px;
+    border-bottom: 2px solid #e6cfa8;
+  }
+  .wrap { padding: 14px 14px 50px; max-width: 1400px; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 24px;
+  }
+  th, td { border: 1px solid #e6cfa8; }
+  th {
+    width: 21%;
+    text-align: left;
+    font-weight: 400;
+    padding: 11px 14px;
+    vertical-align: middle;
+  }
+  td { padding: 5px 10px; }
+  .req { color: #e9625b; margin-left: 2px; }
+  input[type="text"], input[type="tel"], input[type="email"], select, textarea {
+    width: 100%;
+    font: inherit;
+    font-family: Georgia, "Times New Roman", serif;
+    border: 1px solid #c9c9c9;
+    border-radius: 4px;
+    padding: 6px 10px;
+    background: #fff;
+  }
+  select { font-family: inherit; }
+  textarea { min-height: 78px; resize: vertical; font-family: inherit; }
+  input:disabled, .ro { background: #ececec; color: #555; }
+  .radios { display: flex; align-items: center; gap: 22px; }
+  .radios label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  input[type="radio"] { width: 15px; height: 15px; accent-color: #e9625b; }
+  .birth { display: flex; align-items: center; gap: 10px; }
+  .birth select { width: 92px; }
+  .mailrecv p { margin: 6px 0; }
+  .actions { display: flex; justify-content: flex-end; }
+  .actions button {
+    font: inherit;
+    font-weight: 700;
+    color: #fff;
+    background: #e9625b;
+    border: none;
+    border-radius: 5px;
+    padding: 9px 24px;
+    cursor: pointer;
+  }
+  .actions button:hover { background: #d45953; }
+  .note { color: #8d8d8d; font-size: 12px; margin-top: 8px; text-align: right; }
+</style>
+</head>
+<body>
+  <header class="top">
+    <b>顧客マスタ（操作デモ）</b>
+    <a href="/admin">← 予約受付へ戻る</a>
+    <a href="/admin/report">営業実績</a>
+  </header>
+  <div class="titlebar">顧客マスタ</div>
+  <div class="wrap">
+    <table>
+      <tr><th>ID</th><td><input type="text" id="cid" disabled></td></tr>
+      <tr><th>会員番号(半角)</th><td><input type="text" id="member"></td></tr>
+      <tr><th>氏名<span class="req">*</span></th><td><input type="text" id="name"></td></tr>
+      <tr><th>フリガナ</th><td><input type="text" id="kana"></td></tr>
+      <tr><th>性別</th><td><div class="radios">
+        <label><input type="radio" name="g" value="m"> 男性</label>
+        <label><input type="radio" name="g" value="f"> 女性</label>
+      </div></td></tr>
+      <tr><th>生年月日</th><td><div class="birth">
+        <select><option></option></select> - <select><option></option></select> - <select><option></option></select> <span>(歳)</span>
+      </div></td></tr>
+      <tr><th>TEL(半角)</th><td><input type="tel" id="tel"></td></tr>
+      <tr><th>予備TEL1(半角)</th><td><input type="tel"></td></tr>
+      <tr><th>予備TEL2(半角)</th><td><input type="tel"></td></tr>
+      <tr><th>予備TEL3(半角)</th><td><input type="tel"></td></tr>
+      <tr><th>メールアドレス1(半角)</th><td><input type="email" id="email"></td></tr>
+      <tr><th>メールアドレス2(半角)</th><td><input type="email" disabled></td></tr>
+      <tr><th>メール受け取り</th><td class="mailrecv">
+        <p>本部:</p>
+        <div class="radios"><label><input type="radio" name="hq" checked> 有効</label><label><input type="radio" name="hq"> 無効</label></div>
+        <p>Ueno spa&amp;massage CN Health &amp; Beauty SALON:</p>
+        <div class="radios"><label><input type="radio" name="shop"> 有効</label><label><input type="radio" name="shop" checked> 無効</label></div>
+      </td></tr>
+      <tr><th>郵便番号</th><td><input type="text"></td></tr>
+      <tr><th>都道府県</th><td><select><option></option><option>東京都</option><option>神奈川県</option><option>埼玉県</option><option>千葉県</option></select></td></tr>
+      <tr><th>住所</th><td><input type="text"></td></tr>
+      <tr><th>住所2</th><td><input type="text"></td></tr>
+      <tr><th>DM(郵送物)受け取り</th><td><div class="radios">
+        <label><input type="radio" name="dm"> 有効</label><label><input type="radio" name="dm" checked> 無効</label>
+      </div></td></tr>
+    </table>
+
+    <table>
+      <tr><th>職業選択</th><td><select><option></option><option>会社員</option><option>自営業</option><option>学生</option><option>その他</option></select></td></tr>
+      <tr><th>顧客タグ選択</th><td class="ro">&nbsp;</td></tr>
+      <tr><th>顧客ランク</th><td><select id="rank"><option>★</option><option>★★</option><option selected>★★★</option><option>★★★★</option><option>★★★★★</option></select></td></tr>
+      <tr><th>コメント</th><td><textarea id="comment"></textarea></td></tr>
+      <tr><th>備考1</th><td><textarea></textarea></td></tr>
+      <tr><th>備考2</th><td><textarea></textarea></td></tr>
+      <tr><th>母店</th><td><select><option>Ueno spa&amp;massage CN Health &amp; Beauty SALON</option></select></td></tr>
+    </table>
+    <div class="actions"><button type="button" id="save">保存</button></div>
+    <p class="note">操作デモ：この画面の変更は保存ボタンでこのブラウザ内にのみ記録されます。</p>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+  const q = new URLSearchParams(location.search);
+  const g = (id) => document.getElementById(id);
+  // 予約情報から引き継いだ値を反映
+  const ref = q.get("ref") || "";
+  let h = 0;
+  for (const c of ref) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  g("cid").value = ref ? String(30000000 + (h % 69999999)) : "";
+  g("name").value = q.get("name") || "";
+  g("kana").value = q.get("kana") || "";
+  g("tel").value = (q.get("tel") || "").replace(/\D/g, "");
+  g("email").value = q.get("email") || "";
+  const gender = q.get("gender");
+  if (gender) {
+    const r = document.querySelector('input[name="g"][value="' + gender + '"]');
+    if (r) r.checked = true;
+  }
+  if (q.get("comment")) g("comment").value = q.get("comment");
+  // 一時保存（ブラウザ内のみ・失敗しても動作に影響しない）
+  const key = "pm-customer-" + (g("cid").value || "new");
+  try {
+    const saved = JSON.parse(localStorage.getItem(key) || "null");
+    if (saved) for (const [k, v] of Object.entries(saved)) { if (g(k)) g(k).value = v; }
+  } catch {}
+  g("save").addEventListener("click", () => {
+    try {
+      const data = {};
+      for (const id of ["member", "name", "kana", "tel", "email", "comment"]) data[id] = g(id).value;
+      localStorage.setItem(key, JSON.stringify(data));
+    } catch {}
+    alert("保存しました（デモ）。");
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "name": "cn-salon-ueno-original",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  }
+}

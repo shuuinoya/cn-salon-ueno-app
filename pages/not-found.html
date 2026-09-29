@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>ページが見つかりません | UENO CN health＆beauty salon</title>
+<link rel="icon" href="/favicon.svg"/>
+<style>
+  /* サイト本体（index.BFcGkxEb.css）と同じ配色トークンに合わせた404ページ */
+  :root { --primary:#c79a59; --primary-deep:#946328; --page:#f0f1f3; --line:#e5e7eb; --muted:#6b7280; --text:#111827; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text);
+    font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .site-header {
+    background: #fff;
+    border-bottom: 1px solid var(--line);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .site-header img { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; }
+  .site-header b { font-size: 15px; }
+  main {
+    max-width: 560px;
+    margin: 48px auto;
+    padding: 0 16px;
+  }
+  .card {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 28px 24px;
+    text-align: center;
+  }
+  .code { font-size: 40px; font-weight: 700; color: var(--primary); margin: 0 0 4px; }
+  h1 { font-size: 18px; margin: 0 0 10px; }
+  p { color: var(--muted); font-size: 14px; line-height: 1.8; margin: 0 0 20px; }
+  .links { display: flex; flex-direction: column; gap: 10px; }
+  .links a {
+    display: block;
+    padding: 12px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 15px;
+  }
+  .links a.primary { background: var(--primary); color: #fff; }
+  .links a.primary:hover { background: var(--primary-deep); }
+  .links a.secondary { border: 1px solid var(--line); color: var(--text); background: #fff; }
+  .links a.secondary:hover { border-color: var(--primary); }
+  .tel { margin-top: 18px; font-size: 14px; }
+  .tel a { color: var(--primary-deep); }
+</style>
+</head>
+<body>
+  <header class="site-header">
+    <img src="/images/logo.jpg.webp" alt=""/>
+    <b>UENO CN health＆beauty salon</b>
+  </header>
+  <main>
+    <section class="card">
+      <p class="code">404</p>
+      <h1>ページが見つかりませんでした</h1>
+      <p>URLが間違っているか、ページが移動した可能性があります。<br/>下のリンクからお進みください。</p>
+      <nav class="links">
+        <a class="primary" href="/">トップページへ</a>
+        <a class="secondary" href="/book">予約する</a>
+        <a class="secondary" href="/menus">メニューを見る</a>
+        <a class="secondary" href="/map">店舗情報・アクセス</a>
+        <a class="secondary" href="/admin">管理画面（操作デモ）</a>
+      </nav>
+      <p class="tel">お電話でのご予約：<a href="tel:0368060324">03-6806-0324</a></p>
+    </section>
+  </main>
+</body>
+</html>

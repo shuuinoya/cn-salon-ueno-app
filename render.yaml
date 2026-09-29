@@ -1,0 +1,30 @@
+# Render (https://render.com) 用ブループリント【完全無料構成】
+# ・無料Webサービス（クレジットカード不要）で24時間ホスティング
+# ・予約データはGitHubの非公開リポジトリへ自動保存（ディスク課金なしで永続化）
+# 使い方: Renderで「New + → Blueprint」→このリポジトリを選択 →
+#         環境変数 GH_TOKEN / GH_REPO をダッシュボードで入力するだけ
+services:
+  - type: web
+    name: cn-salon-ueno
+    runtime: docker
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: CLOUD
+        value: "1"
+      - key: BIND
+        value: "0.0.0.0"
+      - key: GH_REPO        # 例: あなたのユーザー名/cn-salon-data（非公開リポジトリ）
+        sync: false
+      - key: GH_TOKEN       # GitHubのFine-grained token（対象リポジトリのContents: Read and write）
+        sync: false
+# ─────────────────────────────────────────────
+# 【有料版に切り替える場合】plan: starter にして下を有効化すると、
+# GitHub同期の代わりに永続ディスクへ保存されます（どちらでも動作します）
+#    disk:
+#      name: salon-data
+#      mountPath: /var/data
+#      sizeGB: 1
+#    envVars:
+#      - key: DEMO_DATA
+#        value: /var/data/state.json

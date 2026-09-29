@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>ホットペッパー連携 | CNsalon@board</title>
+<link rel="icon" href="/favicon.svg"/>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.7 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif; background: #efe9e2; color: #333; }
+  header { background: #8b6b4f; color: #fff; padding: 10px 18px; display: flex; align-items: center; gap: 12px; }
+  header svg { display: block; }
+  header b { font-size: 15px; }
+  header a { color: #ffe9c9; margin-left: auto; text-decoration: none; font-size: 13px; }
+  main { max-width: 1040px; margin: 22px auto; padding: 0 16px; }
+  h1 { font-size: 18px; margin: 0 0 6px; }
+  .note { background: #fff7e0; border: 1px solid #eadaa2; border-radius: 6px; padding: 12px 16px; margin: 0 0 18px; font-size: 13px; }
+  .card { background: #fff; border: 1px solid #ddd2c2; border-radius: 8px; padding: 16px 18px; margin-bottom: 18px; }
+  .card h2 { font-size: 15px; margin: 0 0 10px; color: #6b4f2a; }
+  form.hp { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; align-items: end; }
+  form.hp label { display: block; font-size: 12px; font-weight: 700; color: #555; }
+  form.hp input, form.hp select { width: 100%; font: inherit; font-size: 13px; padding: 8px 10px; border: 1px solid #cfc6b8; border-radius: 4px; margin-top: 3px; background: #fff; }
+  form.hp .wide { grid-column: span 2; }
+  form.hp button { grid-column: span 1; font: inherit; font-weight: 700; color: #fff; background: #f4511e; border: 0; border-radius: 5px; padding: 10px 0; cursor: pointer; }
+  form.hp button:hover { filter: brightness(0.95); }
+  #hp-result { margin: 10px 2px 0; font-size: 13px; min-height: 1.4em; }
+  #hp-result.ok { color: #1a7f37; }
+  #hp-result.ng { color: #d13438; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { border: 1px solid #e0d6ca; padding: 7px 10px; text-align: left; white-space: nowrap; }
+  th { background: #f4ecdf; color: #6b4f2a; }
+  td.menu { white-space: normal; }
+  .res-ok { color: #1a7f37; font-weight: 700; }
+  .res-ng { color: #d13438; font-weight: 700; }
+  .res-cx { color: #8a6a33; font-weight: 700; }
+  .empty { color: #999; padding: 14px 4px; }
+</style>
+</head>
+<body>
+<header>
+  <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="#fff" d="M12 12C-3 13 0-3 9 1c3 1 3 7 3 11ZM12 12C11-3 27 0 23 9c-1 3-7 3-11 3ZM12 12c15-1 12 15 3 11-3-1-3-7-3-11ZM12 12c1 15-15 12-11 3 1-3 7-3 11-3Z"/></svg>
+  <b>ホットペッパー連携</b>
+  <a href="/admin">← 予約台帳へ戻る</a>
+</header>
+<main>
+  <h1>ホットペッパーの予約をこの台帳に自動反映</h1>
+  <p class="note">
+    ホットペッパー側で予約が入ると、この台帳の<b>同じ枠が自動で埋まり</b>、お客様名・メニュー名・料金も反映されます（枠には
+    <b style="color:#f4511e">HP</b> バッジが付きます）。空き判定は自社予約とまったく同じ条件を通すため、
+    <b>自社の予約サイトと枠が被ることはありません</b>（すでに埋まっている枠は「slotTaken」で自動拒否）。
+    ホットペッパー側のキャンセルも通知されれば枠を開放します。<br/>
+    接続方法：ホットペッパー側のシステムから <code>POST /api/partner/hotpepper</code>
+    へ予約内容（予約番号・日付・開始時刻・分数・メニュー・料金・氏名など）を送るだけです。
+    ※このデモはローカル専用のため、下の「受信テスト」でホットペッパーからの通知を疑似送信して動作を確認できます。
+  </p>
+
+  <div class="card">
+    <h2>受信テスト（ホットペッパーからの通知を疑似送信）</h2>
+    <form class="hp" id="hp-form">
+      <label>日付<input type="date" id="hp-date" required></label>
+      <label>開始時刻<select id="hp-time"></select></label>
+      <label>分数<input type="number" id="hp-min" value="60" min="10" max="600" step="5" required></label>
+      <label class="wide">メニュー名<input type="text" id="hp-menu" value="全身オイルマッサージ 60分（HP限定）" required></label>
+      <label>料金(円)<input type="number" id="hp-price" value="6980" min="0" step="10" required></label>
+      <label class="wide">お名前<input type="text" id="hp-name" value="ホットペッパー 花子" required></label>
+      <label class="wide">電話番号<input type="text" id="hp-tel" value="090-0000-1111"></label>
+      <button type="submit">受信テスト</button>
+    </form>
+    <p id="hp-result"></p>
+  </div>
+
+  <div class="card">
+    <h2>予約通知メールの自動取り込み（実接続）</h2>
+    <p id="hp-mail-state" style="margin:0 0 10px;font-size:13px;color:#666">確認中…</p>
+    <button type="button" id="hp-poll" style="font:inherit;font-weight:700;color:#fff;background:#8b6b4f;border:0;border-radius:5px;padding:9px 18px;cursor:pointer">メール取込を今すぐ実行</button>
+    <span id="hp-poll-result" style="margin-left:10px;font-size:13px"></span>
+    <p style="font-size:12px;color:#888;margin:10px 0 0">
+      ホットペッパー（サロンボード）から店舗メールに届く予約通知を、毎分自動でチェックして台帳に反映します。
+      件名の条件・対象メールは mail-config.json の hotpepper 設定で変更できます。
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>サロンボードへの反映（自社予約 → ホットペッパー側の枠を塞ぐ）</h2>
+    <p style="font-size:13px;color:#555;margin:0 0 10px;line-height:1.8">
+      当システムに予約が入ると、ここに<b>転記待ち</b>として並びます。「コピー」でお客様情報を写し、
+      <a href="https://salonboard.com/login/" target="_blank" rel="noopener" style="color:#b08d4f;font-weight:700">サロンボード</a>
+      に予約（またはネット予約停止枠）として登録したら「反映済み」を押してください。
+      <b>変更・取消があった予約は自動でこのリストに戻ります。</b><br/>
+      <span style="color:#888;font-size:12px">※サロンボードには公開APIが無く、ID/パスワードでの自動書き込みは利用規約違反（アカウント停止リスク）となるため行いません。完全自動の双方向連携が必要な場合は、リクルート認定の連携サービス（かんざし・BeautyMerit等）のご契約が正規ルートです。</span>
+    </p>
+    <div id="sb-list"><p class="empty">読み込み中…</p></div>
+  </div>
+
+  <div class="card">
+    <h2>受信履歴（最新50件）</h2>
+    <div id="hp-log"><p class="empty">読み込み中…</p></div>
+  </div>
+</main>
+<script>
+(function () {
+  "use strict";
+  var d = new Date(Date.now() + 9 * 3600e3 - 108e5);
+  d = new Date(d.getTime() + 86400000); // 既定は明日
+  document.getElementById("hp-date").value = d.toISOString().slice(0, 10);
+  var timeSel = document.getElementById("hp-time");
+  for (var m = 600; m <= 1560; m += 30) {
+    var o = document.createElement("option");
+    o.value = m;
+    o.textContent = Math.floor(m / 60) + ":" + String(m % 60).padStart(2, "0");
+    if (m === 840) o.selected = true; // 14:00
+    timeSel.appendChild(o);
+  }
+  var esc = function (t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;"); };
+
+  function renderLog(log) {
+    var box = document.getElementById("hp-log");
+    if (!log || !log.length) { box.innerHTML = '<p class="empty">まだ受信はありません。上の受信テストで動作を確認できます。</p>'; return; }
+    var rows = log.map(function (e) {
+      var cls = e.result === "受信" ? "res-ok" : e.result === "取消" ? "res-cx" : "res-ng";
+      var detail = e.result === "受信"
+        ? (e.date + " " + e.time + "／担当:" + esc(e.staff))
+        : e.result === "取消" ? (e.date || "") : ("理由:" + esc(e.error) + (e.time ? "（" + e.date + " " + e.time + "）" : ""));
+      return "<tr><td>" + esc((e.at || "").replace("T", " ").slice(0, 19)) + "</td>" +
+        '<td class="' + cls + '">' + esc(e.result) + "</td>" +
+        "<td>" + esc(e.rid || "") + "</td>" +
+        '<td class="menu">' + esc(e.menu || "") + "</td>" +
+        "<td>" + (e.price != null ? esc(e.price) + "円" : "") + "</td>" +
+        "<td>" + esc(e.name || "") + "</td>" +
+        "<td>" + detail + "</td></tr>";
+    }).join("");
+    box.innerHTML = "<table><thead><tr><th>受信時刻</th><th>結果</th><th>HP予約番号</th><th>メニュー</th><th>料金</th><th>お名前</th><th>詳細</th></tr></thead><tbody>" + rows + "</tbody></table>";
+  }
+  function loadLog() {
+    fetch("/api/partner/hotpepper", { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        renderLog(j.log);
+        var st = document.getElementById("hp-mail-state");
+        if (st && j.mailIntake) {
+          st.textContent = j.mailIntake.configured
+            ? (j.mailIntake.auto
+              ? "設定済み：店舗メール（Gmail）の受信箱を毎分チェックしています。"
+              : "設定済み：このサーバーでは自動チェックは停止中です（手動取込は使えます）。")
+            : "未設定：mail-config.json に hotpepper 設定を追加すると有効になります。";
+        }
+      })
+      .catch(function () {});
+  }
+  document.getElementById("hp-poll").addEventListener("click", function () {
+    var out = document.getElementById("hp-poll-result");
+    out.textContent = "取込中…"; out.style.color = "#666";
+    fetch("/api/partner/hotpepper?poll=1", { method: "POST" })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (res.ok) {
+          out.textContent = "未読" + res.j.checked + "件を確認し、" + res.j.imported + "件を取り込みました。";
+          out.style.color = res.j.imported ? "#1a7f37" : "#666";
+        } else {
+          out.textContent = res.j.error === "mailConfigMissing"
+            ? "メール設定（mail-config.json の hotpepper）が未設定です。"
+            : "取込エラー：" + (res.j.error || "");
+          out.style.color = "#d13438";
+        }
+        loadLog();
+      })
+      .catch(function () { out.textContent = "通信エラー"; out.style.color = "#d13438"; });
+  });
+  loadLog();
+  setInterval(loadLog, 3000);
+
+  // ---- サロンボード転記リスト ----
+  function renderSb(items) {
+    var box = document.getElementById("sb-list");
+    if (!items || !items.length) {
+      box.innerHTML = '<p class="empty">転記待ちの予約はありません。すべてサロンボードに反映済みです。</p>';
+      return;
+    }
+    var rows = items.map(function (it) {
+      var kc = it.kind === "取消" ? "res-ng" : it.kind === "変更" ? "res-cx" : "res-ok";
+      return "<tr><td class='" + kc + "'>" + esc(it.kind) + "</td>" +
+        "<td>" + esc(it.date) + " " + esc(it.time) + "</td>" +
+        "<td>" + esc(it.name) + (it.people > 1 ? "（" + it.people + "名）" : "") + "</td>" +
+        '<td class="menu">' + esc(it.menu) + "</td>" +
+        "<td>" + esc(it.staff) + "</td>" +
+        '<td><button type="button" class="sb-copy" data-copy="' + esc(it.date + " " + it.time + "／" + it.name + " 様／" + it.phone + "／" + it.menu + "／担当:" + it.staff + "／予約ID:" + it.ref) + '">コピー</button> ' +
+        '<button type="button" class="sb-done" data-done="' + esc(it.id) + '">反映済み</button></td></tr>';
+    }).join("");
+    box.innerHTML = "<table><thead><tr><th>種別</th><th>日時</th><th>お客様</th><th>メニュー</th><th>担当</th><th></th></tr></thead><tbody>" + rows + "</tbody></table>";
+  }
+  function loadSb() {
+    fetch("/api/demo/sbsync", { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { renderSb(j.items); })
+      .catch(function () {});
+  }
+  loadSb();
+  setInterval(loadSb, 5000);
+  document.addEventListener("click", function (e) {
+    var cp = e.target.closest(".sb-copy");
+    if (cp) {
+      var txt = cp.getAttribute("data-copy");
+      (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject())
+        .then(function () { cp.textContent = "コピー済"; setTimeout(function () { cp.textContent = "コピー"; }, 1500); })
+        .catch(function () { window.prompt("この内容をサロンボードに転記してください", txt); });
+      return;
+    }
+    var dn = e.target.closest(".sb-done");
+    if (dn) {
+      fetch("/api/demo/sbsync", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: dn.getAttribute("data-done") }) }).then(loadSb);
+    }
+  });
+
+  document.getElementById("hp-form").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    var out = document.getElementById("hp-result");
+    out.textContent = "送信中…"; out.className = "";
+    fetch("/api/partner/hotpepper", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        reservationId: "HP" + Date.now().toString().slice(-8),
+        date: document.getElementById("hp-date").value,
+        start: Number(timeSel.value),
+        minutes: Number(document.getElementById("hp-min").value),
+        menu: document.getElementById("hp-menu").value,
+        price: Number(document.getElementById("hp-price").value),
+        name: document.getElementById("hp-name").value,
+        phone: document.getElementById("hp-tel").value,
+      }),
+    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (res.ok && res.j.ok) {
+          out.textContent = "受信しました。担当：" + res.j.staff + "。台帳の枠が埋まり、HPバッジ付きで表示されます。";
+          out.className = "ok";
+        } else {
+          out.textContent = res.j.error === "slotTaken"
+            ? "この枠はすでに埋まっているため拒否しました（二重予約は起きません）。"
+            : "受信できませんでした（" + (res.j.error || "エラー") + "）。";
+          out.className = "ng";
+        }
+        loadLog();
+      })
+      .catch(function () { out.textContent = "通信エラー"; out.className = "ng"; });
+  });
+})();
+</script>
+</body>
+</html>

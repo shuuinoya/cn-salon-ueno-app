@@ -1,0 +1,1635 @@
+/* 本物の管理システム（Peak Manager）のレイアウトに合わせるための上書きスタイル。
+   保存された AdminSchedule.B6xQvMXS.css は無加工のまま、この後から読み込んで上書きする。 */
+
+/* ---- スタッフ欄：名前の右に 🔓 ★0 を表示（施術分数の代わり） ---- */
+.ledger-row > .ledger-staff-cell {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.ledger-row > .ledger-staff-cell b { margin-right: auto; }
+.ledger-row > .ledger-staff-cell small { display: none; }
+.ledger-row > .ledger-staff-cell::after {
+  content: attr(data-pmstar);
+  color: #8d8d8d;
+  font-size: 11px;
+  white-space: nowrap;
+}
+/* 鍵（予約受付停止）トグルボタン */
+.pm-lockbtn {
+  display: inline-block;
+  width: 16px;
+  height: 15px;
+  margin-left: auto;
+  cursor: pointer;
+  border-radius: 2px;
+  background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="%23909090" stroke-width="2"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.9-.8"/></svg>') center no-repeat;
+}
+/* 赤い枠は出さない（ホバー・クリック時とも控えめな表示に） */
+.pm-lockbtn:hover { background-color: #efe7da; }
+.pm-lockbtn:focus, .pm-lockbtn:focus-visible { outline: none; }
+.pm-locked .pm-lockbtn {
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="%23555555" stroke-width="2.4"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>');
+}
+/* 受付停止中はスタッフ欄も薄い青に */
+main.ledger-app .pm-locked > .ledger-staff-cell { background: #e2eefc !important; }
+/* シフト内は本物と同じく白スロット（保存CSSの標準は青のため上書き） */
+main.ledger-app .ledger-onshift { background: #fff !important; }
+/* 青いスロットの行（契約形態違いの表現）はこの2行だけ */
+main.ledger-app .pm-blue .ledger-onshift { background: #e2eefc !important; }
+
+/* 行の高さを本物に合わせて広げる */
+main.ledger-app .ledger-row { height: 56px; }
+main.ledger-app .ledger-track { min-height: 56px; }
+/* 強調（ピンク）の行 */
+main.ledger-app .pm-pink > .ledger-staff-cell {
+  background: #fdeaea !important;
+  box-shadow: inset 3px 0 0 #e9625b;
+}
+
+/* ---- ツールバー：日付ボックス・天気ボタン・店舗名ボックス ---- */
+.ledger-date-trigger {
+  background: #fff;
+  border: 1px solid #c6b9ad;
+  min-width: 150px;
+  justify-content: space-between;
+}
+.pm-weather {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.pm-cloud {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  vertical-align: middle;
+  background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="%233b82d0" d="M12 2c5.4 0 9.8 3.9 10 9H2c.2-5.1 4.6-9 10-9Z"/><path fill="%232f6cb0" d="M12 2c1.8 0 3.4 4 3.4 9H8.6C8.6 6 10.2 2 12 2Z"/><path fill="%23555" d="M11.3 11h1.4v8.2a2.6 2.6 0 0 1-5.2 0h1.5a1.1 1.1 0 0 0 2.3 0Z"/></svg>') center / contain no-repeat;
+}
+
+/* ---- モード選択の見た目を本物に合わせる（全体・シフトを選択状態に） ---- */
+main.ledger-app .ledger-mode-group:first-of-type button:first-child {
+  background: #fff !important;
+  color: #292929 !important;
+}
+main.ledger-app .ledger-mode-group:first-of-type button:nth-child(2) {
+  background: #4d4d4d !important;
+  border-color: #4d4d4d !important;
+  color: #fff !important;
+}
+main.ledger-app .ledger-mode-group:nth-of-type(2) button:first-child {
+  background: #4d4d4d !important;
+  border-color: #4d4d4d !important;
+  color: #fff !important;
+}
+.ledger-store-name {
+  background: #fff;
+  border: 1px solid #c6b9ad;
+  border-radius: 2px;
+  padding: 4px 22px 4px 10px;
+  position: relative;
+  color: #292929;
+}
+.ledger-store-name::after {
+  content: "▾";
+  position: absolute;
+  right: 7px;
+  color: #8d8d8d;
+}
+
+/* ---- 時間（分）の自由入力欄 ---- */
+main.ledger-app .ledger-side-form .pm-durfree { margin: -6px 0 12px; }
+main.ledger-app .ledger-side-form .pm-durfree label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+main.ledger-app .ledger-side-form .pm-durfree input {
+  width: 120px;
+  padding: 5px;
+  border: 1px solid #c7c5c3;
+  background: #fff;
+}
+main.ledger-app .ledger-side-form .pm-durfree small {
+  display: block;
+  color: #8a7a6a;
+  font-size: 10px;
+  margin-top: 3px;
+}
+/* 自由入力中はボタンの選択色を消して、どちらが有効か分かるようにする */
+main.ledger-app .ledger-duration.pm-durfree-on button.selected {
+  background: #fff;
+  color: inherit;
+}
+
+/* ---- タップした空き枠の赤いランプ ---- */
+main.ledger-app .ledger-track .pm-tap-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  background: #e8514d;
+  pointer-events: none;
+}
+
+/* ---- ヘッダー左：白い花びらロゴ（SVG） ---- */
+main.ledger-app .ledger-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+main.ledger-app .ledger-logo svg { display: block; }
+/* 元の桜マークはどの画面・どの瞬間も見せない（クローバー以外のロゴ中身は非表示）。
+   Reactは状況により「✿」という文字でも描くため、文字サイズ0＋透明で文字も封じる */
+.ledger-logo { font-size: 0 !important; color: transparent !important; }
+.ledger-logo svg:not(.pm-clover),
+.ledger-logo img { display: none !important; }
+
+/* ---- ヘッダー右：警告バッジ＋ユーザー表示 ---- */
+.pm-alert {
+  background: #e6b05f;
+  color: #fff;
+  font-weight: 700;
+  font-size: 12px;
+  border-radius: 3px;
+  padding: 2px 10px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+.pm-alert + .ledger-brand { margin-left: 10px; }
+.ledger-brand::before { content: "👤 "; font-size: 12px; }
+.ledger-brand::after { content: " ▾"; font-size: 10px; }
+.ledger-brand { cursor: pointer; user-select: none; }
+
+/* ユーザーメニュー（ログアウト） */
+#pm-usermenu {
+  position: fixed;
+  z-index: 300;
+  background: #fff;
+  border: 1px solid #b58e66;
+  min-width: 190px;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.18);
+}
+#pm-usermenu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  font-size: 15px;
+  padding: 12px 16px;
+  cursor: pointer;
+  color: #292929;
+}
+#pm-usermenu button:hover { background: #f5ede5; }
+
+/* ---- 予約詳細パネル（本物と同じ構成） ---- */
+main.ledger-app .ledger-side.pm-side {
+  width: 480px;
+  border: 2px solid #987050;
+  border-radius: 3px;
+  margin: 6px 0 6px 6px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+.pm-side .ledger-side-search { order: 6; }
+/* 予約詳細パネルでは、本物と同じく最上部に「顧客を検索」入力欄を見せる
+   （×ボタンはパネル内のXが代替するため隠す） */
+main.ledger-app .ledger-side.pm-side:has(#pm-pd) .ledger-side-search {
+  display: flex;
+  order: -1;
+  margin: 2px 2px 8px;
+}
+main.ledger-app .ledger-side.pm-side:has(#pm-pd) .ledger-side-search input {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  padding: 8px 9px;
+}
+main.ledger-app .ledger-side.pm-side:has(#pm-pd) .ledger-side-search button { display: none; }
+/* 空き枠タップ時：本物と同じ茶色パネル。React側の検索欄は隠す（×は閉じる用に残す） */
+main.ledger-app .ledger-side.pm-side:has(.pm-new) { background: #987050; border-color: #7c5a3f; }
+main.ledger-app .pm-side:has(.pm-new) .ledger-side-search { display: none !important; }
+.ledger-side-form.pm-new { background: transparent; box-shadow: none; }
+.pm-side .ledger-side-form { order: 9; }
+.pm-side .ledger-booking-list { order: 7; }
+#pm-pd { order: 3; padding: 0; }
+/* 予約詳細のときはReactのフォームは隠し、「編集」で表示する */
+.ledger-side-form.pm-booking > h2,
+.ledger-side-form.pm-booking > label,
+.ledger-side-form.pm-booking > p,
+.ledger-side-form.pm-booking .ledger-booking-detail,
+.ledger-side-form.pm-booking .ledger-form-actions { display: none; }
+.ledger-side-form.pm-booking.pm-editing > label,
+.ledger-side-form.pm-booking.pm-editing > p:first-of-type,
+.ledger-side-form.pm-booking.pm-editing .ledger-form-actions { display: flex; }
+.ledger-side-form.pm-booking.pm-editing {
+  border-top: 1px dashed #c6b9ad;
+  padding-top: 10px;
+}
+
+.pm-shoprow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #987050;
+  color: #fff;
+  font-weight: 700;
+  padding: 6px 10px;
+}
+.pm-shoprow label { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.pm-cust { padding: 10px 12px 6px; border-bottom: 1px solid #e5d9cd; }
+.pm-cust-rank { font-size: 13px; line-height: 1.7; }
+.pm-cust-name {
+  font-size: 19px;
+  font-weight: 700;
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pm-gender { color: #e9625b; font-size: 17px; }
+.pm-count { margin-left: auto; font-size: 15px; }
+.pm-icons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 8px 12px;
+}
+.pm-icons button {
+  width: 52px;
+  height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border: 2px solid #f05b23;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+.pm-icons small { font-size: 10px; color: #f05b23; font-weight: 700; white-space: nowrap; letter-spacing: -1px; }
+.pm-icons b { font-size: 19px; color: #f05b23; font-weight: 400; }
+.pm-idbox {
+  margin: 4px 10px 10px;
+  border: 2px solid #987050;
+  border-radius: 3px;
+  padding: 10px;
+}
+.pm-idrow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+.pm-idbtns { display: flex; gap: 8px; }
+main.ledger-app .pm-red, .pm-red {
+  background: #e9625b !important;
+  color: #fff !important;
+  font-weight: 700;
+  border: none !important;
+  border-radius: 4px;
+  padding: 7px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+main.ledger-app .pm-red:hover, .pm-red:hover { background: #d45953 !important; }
+main.ledger-app .pm-x, .pm-x {
+  background: #fff !important;
+  border: 1px solid #555 !important;
+  color: #292929 !important;
+  border-radius: 4px;
+  font-weight: 700;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.pm-tabrow {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin: 10px 0 8px;
+  border-bottom: 1px solid #c6b9ad;
+  padding-bottom: 0;
+}
+.pm-tab {
+  border: 1px solid #c6b9ad;
+  border-bottom: none;
+  border-radius: 4px 4px 0 0;
+  background: #fff;
+  min-width: 110px;
+  min-height: 24px;
+  padding: 4px 12px;
+  font-size: 13px;
+}
+.pm-plus {
+  border: 1px solid #c6b9ad;
+  background: #fff;
+  border-radius: 4px;
+  padding: 3px 9px;
+  cursor: pointer;
+  margin-left: auto;
+}
+.pm-btnrow { display: flex; align-items: center; gap: 8px; margin: 10px 0; }
+.pm-btnrow > span { flex: 1; }
+.pm-btnrow.pm-right { justify-content: flex-end; }
+main.ledger-app .pm-outline, .pm-outline {
+  border: 2px solid #e9625b !important;
+  color: #e9625b !important;
+  background: #fff !important;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 9px 14px;
+  cursor: pointer;
+}
+.pm-mini { display: flex; align-items: center; gap: 4px; font-size: 13px; }
+.pm-mini::before { content: ""; }
+.pm-btnrow input[type="text"] { flex: 1; }
+.pm-dtrow { display: flex; align-items: center; gap: 12px; margin: 12px 0 8px; font-size: 14px; }
+.pm-cap {
+  background: #f4eeea;
+  padding: 3px 14px;
+  font-size: 13px;
+}
+.pm-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+.pm-chip {
+  border: 1px solid #c6b9ad;
+  border-radius: 4px 4px 0 0;
+  background: #fff;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+.pm-table { border-collapse: collapse; width: 100%; margin-top: 4px; }
+.pm-table th {
+  background: #f4eeea;
+  font-weight: 400;
+  font-size: 13px;
+  text-align: left;
+  padding: 5px 10px;
+  width: 8.5em;
+  border-bottom: 4px solid #fff;
+}
+.pm-table td { font-size: 14px; font-weight: 700; padding: 4px 8px; }
+.pm-star { color: #e9625b; }
+
+/* スタッフ名セル左端の色バー（女性=ピンク／男性=ブルー） */
+main.ledger-app .pm-acc-f > .ledger-staff-cell { border-left: 4px solid #f0a1ab; }
+main.ledger-app .pm-acc-m > .ledger-staff-cell { border-left: 4px solid #a6c3de; }
+
+/* 時間別概況の現在時刻の列 */
+main.ledger-app .ledger-overview button.pm-now { background: #e0e0e0; }
+
+/* ---- 下部集計（赤・黒・青の3段） ---- */
+.ledger-summary > b,
+.ledger-summary > span { display: none; }
+#pm-stats { width: 100%; font-size: 14px; line-height: 2; }
+.pm-stat-black { color: #292929; font-weight: 700; }
+.pm-stat-blue { color: #3874cb; font-weight: 700; }
+
+/* 青い「オンライン予約が入りました」トースト */
+#pm-toast {
+  position: fixed;
+  right: 14px;
+  bottom: 84px;
+  z-index: 250;
+  background: #70b5de;
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.7;
+  padding: 12px 18px;
+  border-radius: 3px;
+  box-shadow: 0 3px 10px rgb(0 0 0 / 0.25);
+  cursor: pointer;
+}
+
+/* ---- モード行の案内文：点線の枠エリアに ---- */
+.ledger-modes > span {
+  flex: 1;
+  text-align: center;
+  background: #fff;
+  border: 1.5px dashed #c6b9ad;
+  border-radius: 3px;
+  padding: 7px 10px;
+  color: #8a8178;
+}
+
+/* ---- 台帳イベントの配色（紫＝通常、赤＝指名系、茶＝休憩・業務） ----
+   保存済みCSSがこのファイルより後に読み込まれるため、セレクタの優先度を上げておく */
+main.ledger-app .ledger-event.purple {
+  background: #babafa !important;
+  border-color: #a9a9ea !important;
+  color: #333 !important;
+}
+main.ledger-app .ledger-event.lime {
+  background: #f1756a !important;
+  border-color: #e45949 !important;
+  color: #fff !important;
+}
+main.ledger-app .ledger-event.lime small,
+main.ledger-app .ledger-event.lime span { color: #ffecea !important; }
+main.ledger-app .ledger-event.activity {
+  background: #ae9d97 !important;
+  border-color: #918078 !important;
+  color: #333 !important;
+}
+
+/* 予約ピルのタグチップ（新／指名／未）を本物風に */
+main.ledger-app .ledger-event.purple strong::before {
+  content: "新";
+  display: inline-block;
+  background: #e6a35f;
+  color: #fff;
+  font-weight: 400;
+  font-size: 9px;
+  line-height: 1.3;
+  padding: 0 3px;
+  border-radius: 2px;
+  margin-right: 3px;
+  vertical-align: 1px;
+}
+main.ledger-app .ledger-event.lime strong::before {
+  content: "指名";
+  display: inline-block;
+  background: #d96766;
+  color: #fff;
+  font-weight: 400;
+  font-size: 9px;
+  line-height: 1.3;
+  padding: 0 3px;
+  border-radius: 2px;
+  margin-right: 3px;
+  vertical-align: 1px;
+}
+main.ledger-app .ledger-event.purple::after,
+main.ledger-app .ledger-event.lime::after {
+  content: "未";
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  background: #757575;
+  color: #fff;
+  font-size: 9px;
+  line-height: 1.3;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+/* ---- 下部：装飾ボタンと目標・総販売額 ---- */
+.pm-deco { color: #292929; }
+.pm-target {
+  color: #c23f38;
+  font-weight: 700;
+  padding: 2px 2px 6px;
+  font-size: 13px;
+}
+
+/* ---- 未定行 ---- */
+.pm-undecided .ledger-track { background: #cbcbcb; }
+
+/* ---- レスポンシブ（スマホ幅） ---- */
+@media (max-width: 700px) {
+  main.ledger-app .ledger-side.pm-side { width: calc(100vw - 76px); }
+  .pm-icons { flex-wrap: wrap; justify-content: flex-start; }
+}
+
+/* ---- 月間シフト作成/目標設定（本物のツールバー構成） ---- */
+/* 月間画面では日別ツールバー・目標行を隠す（本物は黄色バー直下に表が来る） */
+body.pm-month-on .ledger-toolbar,
+body.pm-month-on .pm-target,
+body.pm-month-on .ledger-summary { display: none !important; }
+.pm-month h1 { display: none; }
+#pm-month-title {
+  background: #fae2a2;
+  color: #7a5c33;
+  font-weight: 700;
+  font-size: 16px;
+  padding: 12px 16px;
+  margin: -14px -16px 14px;
+}
+.pm-month .ledger-month-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pm-month .ledger-month-heading > b { font-size: 24px; letter-spacing: 1px; }
+#pm-month-left {
+  order: -1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.pm-month .pm-prev { margin-left: auto; }
+#pm-month-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+#pm-bulk-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #c6b9ad;
+  padding: 6px 8px;
+  background: #fff;
+  font-size: 13px;
+}
+#pm-bulk-group select {
+  font: inherit;
+  padding: 6px 6px;
+  border: 1px solid #c6b9ad;
+  border-radius: 4px;
+  background: #fff;
+}
+#pm-bulk-staff { min-width: 110px; }
+main.ledger-app .pm-pill, .pm-pill {
+  border: 2px solid #e9625b !important;
+  color: #e9625b !important;
+  background: #fff !important;
+  border-radius: 999px !important;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 6px 14px !important;
+  cursor: pointer;
+}
+main.ledger-app .pm-pill:disabled, .pm-pill:disabled { opacity: 0.4; }
+main.ledger-app .pm-green, .pm-green {
+  background: #5cb860 !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 5px;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 11px 18px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+main.ledger-app .pm-green:hover, .pm-green:hover { background: #4ea852 !important; }
+main.ledger-app button.pm-blue, #pm-month-tools .pm-blue {
+  background: #5bc0de !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 5px;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 11px 18px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+main.ledger-app button.pm-blue:hover { background: #48b2d2 !important; }
+main.ledger-app .pm-orange, .pm-orange {
+  background: #e8833a !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 5px;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 11px 18px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+#pm-month-left .pm-red, #pm-month-tools .pm-red, #pm-month-bottom .pm-red, #pm-bulk-group .pm-red {
+  border-radius: 5px !important;
+  font-size: 14px !important;
+  padding: 11px 18px !important;
+}
+#pm-bulk-group .pm-red { padding: 8px 16px !important; }
+#pm-month-bottom {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+/* 表：本物と同じ2段見出し（スタッフ名＋店舗略称）と広めのマス */
+.pm-month thead th { font-size: 15px; font-weight: 400; padding: 10px 12px; }
+.pm-month thead th:first-child { color: transparent; }
+.pm-month thead th:not(:first-child):not(.pm-goal-th)::after {
+  content: "Ueno spa&..";
+  display: block;
+  color: #977051;
+  font-weight: 400;
+  font-size: 13px;
+  margin-top: 10px;
+}
+.pm-month thead th.pm-goal-th { color: #292929; }
+.pm-month tbody th { font-size: 15px; font-weight: 400; text-align: right; padding: 10px 12px; white-space: nowrap; }
+.pm-month tbody td { font-size: 15px; padding: 14px 10px; }
+.pm-month tbody td label { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.pm-month td.pm-goal input {
+  font: inherit;
+  width: 100%;
+  min-width: 90px;
+  border: 1px solid #c6b9ad;
+  border-radius: 4px;
+  padding: 8px 8px;
+  background: #fff;
+}
+.pm-month td.pm-goal input[inputmode="numeric"] { text-align: right; }
+/* チェックボックス：本物と同じ大きめの角丸（チェックで青） */
+.pm-month tbody input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  margin: 0;
+  border: 2.5px solid #8d8d8d;
+  border-radius: 7px;
+  background: #fff;
+  cursor: pointer;
+}
+.pm-month tbody input[type="checkbox"]:checked {
+  border-color: #3b7ddd;
+  background: #3b7ddd url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="none" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" d="M5 13l5 5L19 7"/></svg>') center/16px no-repeat;
+}
+/* 一括登録モーダル：本物のタイトル構成（件数入りの h2 は隠す） */
+.pm-modal-note b { display: block; font-size: 24px; font-weight: 700; color: #333; margin-bottom: 8px; }
+.pm-modal-note span { font-size: 14px; font-weight: 700; color: #333; }
+.pm-modal-note {
+  border-bottom: 1px solid #e5e5e5;
+  padding-bottom: 14px;
+  margin-bottom: 6px;
+}
+.ledger-modal .pm-modal-note + h2 { display: none; }
+
+/* 一括登録モーダルの操作列：本物と同じ右寄せ・大きめの登録ボタン */
+.ledger-modal:has(.pm-modal-note) .ledger-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+.ledger-modal:has(.pm-modal-note) .ledger-form-actions button {
+  font-size: 14px;
+  padding: 10px 18px;
+  border-radius: 5px;
+}
+
+/* ---- 店舗情報：予約用ホームページ設定モーダル ---- */
+#pm-shop-modal {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+#pm-shop-modal section {
+  background: #fff;
+  border-radius: 6px;
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 60px);
+  overflow: auto;
+  padding: 22px 24px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.25);
+  font-size: 13px;
+  color: #292929;
+}
+/* 店舗マスタ（実物と同じ表形式＋折りたたみ見出し） */
+#pm-shop-modal section.pm-sm-dialog {
+  width: min(1000px, calc(100vw - 32px));
+  padding: 0;
+  border: 1px solid #d8c7a6;
+  border-radius: 8px;
+}
+.pm-sm-head {
+  background: #f9e6ae;
+  border-bottom: 1px solid #e6cf94;
+  border-radius: 8px 8px 0 0;
+  padding: 12px 18px;
+}
+.pm-sm-head b { font-size: 15px; color: #3f3428; }
+.pm-sm-body { padding: 16px 18px 18px; }
+.pm-sm-grid {
+  display: grid;
+  grid-template-columns: 170px 1fr 170px 1fr;
+  border-left: 1px solid #ddd2c2;
+  border-top: 1px solid #ddd2c2;
+  margin-bottom: 14px;
+}
+.pm-sm-l, .pm-sm-v {
+  border-right: 1px solid #ddd2c2;
+  border-bottom: 1px solid #ddd2c2;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  min-height: 46px;
+}
+.pm-sm-l { font-size: 13px; color: #333; }
+.pm-sm-l i { color: #e02020; font-style: normal; margin-left: 2px; }
+.pm-sm-v.pm-sm-wide { grid-column: 2 / 5; }
+.pm-sm-v input[type="text"], .pm-sm-v select {
+  width: 100%;
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 10px;
+  border: 1px solid #cfc6b8;
+  border-radius: 4px;
+  background: #fff;
+}
+.pm-sm-v input.pm-sm-ro { background: #ececec; color: #444; }
+.pm-sm-radios { gap: 22px; }
+.pm-sm-radios label { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-weight: 400; }
+.pm-sm-acc {
+  background: #efe6dc;
+  border: 1px solid #e0d4c6;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+.pm-sm-acc summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 12px 16px;
+  color: #d9534a;
+  font-weight: 700;
+  font-size: 14px;
+}
+.pm-sm-acc summary::after { content: "▼"; font-size: 9px; margin-left: 6px; }
+.pm-sm-acc[open] summary::after { content: "▲"; }
+.pm-sm-acc .pm-sm-note { margin: 0; padding: 0 16px 12px; color: #8a7a68; }
+.pm-sm-acc .pm-sm-fm { background: #fff; margin: 0 10px 10px; padding: 12px 14px; border-radius: 4px; }
+/* 業務設定・会員番号：白カード内の表形式 */
+.pm-sm-acc .pm-biz { background: #fff; margin: 0 10px 12px; padding: 12px 14px; border-radius: 4px; }
+.pm-biz-grid {
+  display: grid;
+  grid-template-columns: 200px 1fr 200px 1fr;
+  border-left: 1px solid #ddd2c2;
+  border-top: 1px solid #ddd2c2;
+}
+.pm-biz-grid .pm-sm-l, .pm-biz-grid .pm-sm-v {
+  border-right: 1px solid #ddd2c2;
+  border-bottom: 1px solid #ddd2c2;
+  padding: 9px 12px;
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+}
+.pm-biz-grid select { width: 100%; font: inherit; font-size: 13px; padding: 7px 10px; border: 1px solid #cfc6b8; border-radius: 4px; background: #fff; }
+.pm-biz-grid .pm-sm-wide { grid-column: 2 / 5; }
+.pm-biz .pm-sm-note { padding: 8px 2px 0; }
+
+/* 台帳：営業時間外のグレー表示（店舗マスタの営業開始・終了に即時連動） */
+main.ledger-app .ledger-track .pm-biz-off {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgb(110 100 90 / 0.16);
+  pointer-events: none;
+  z-index: 1;
+}
+#pm-shop-modal h2 { margin: 0 0 6px; font-size: 20px; }
+#pm-shop-modal .pm-shop-sub {
+  color: #6b5b4b;
+  border-bottom: 1px solid #e5d9cd;
+  padding-bottom: 10px;
+  margin: 0 0 14px;
+}
+#pm-shop-modal label { display: block; margin-bottom: 12px; font-weight: 700; }
+#pm-shop-modal label input[type="text"],
+#pm-shop-modal label input[type="number"] {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-weight: 400;
+  border: 1px solid #c6b9ad;
+  border-radius: 3px;
+  padding: 8px 10px;
+  margin-top: 4px;
+  background: #fff;
+}
+#pm-shop-modal .pm-shop-check { display: flex; align-items: center; gap: 8px; }
+#pm-shop-modal .pm-shop-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+}
+#pm-shop-modal .pm-shop-actions button {
+  font: inherit;
+  padding: 9px 18px;
+  border-radius: 4px;
+  border: 1px solid #c6b9ad;
+  background: #fff;
+  cursor: pointer;
+}
+#pm-shop-modal .pm-shop-actions .pm-red { border: none; }
+
+/* スタッフ編集フォームの削除ボタン */
+.staff-form-actions { display: flex; gap: 10px; align-items: center; }
+.staff-form-actions .pm-staff-del {
+  font: inherit;
+  background: #e9625b;
+  color: #fff;
+  border: none;
+  border-radius: 3px;
+  padding: 9px 22px;
+  cursor: pointer;
+}
+.staff-form-actions .pm-staff-del:hover { background: #d45953; }
+
+/* 日次管理メニュー（営業実績） */
+#pm-dailymenu {
+  position: fixed;
+  z-index: 1000;
+  background: #fff;
+  border: 1px solid #c6b9ad;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.18);
+  min-width: 200px;
+  padding: 4px 0;
+}
+#pm-dailymenu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  background: none;
+  border: none;
+  padding: 9px 18px;
+  cursor: pointer;
+  color: #292929;
+}
+#pm-dailymenu button:hover { background: #f7dfa0; }
+
+/* 店舗情報：メニュー一覧モーダル */
+#pm-menu-modal {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+#pm-menu-modal section {
+  background: #fff;
+  border-radius: 6px;
+  width: min(860px, calc(100vw - 32px));
+  max-height: calc(100vh - 60px);
+  overflow: auto;
+  padding: 22px 24px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.25);
+  font-size: 13px;
+  color: #292929;
+}
+#pm-menu-modal h2 { margin: 0 0 6px; font-size: 20px; }
+#pm-menu-modal .pm-shop-sub {
+  color: #6b5b4b;
+  border-bottom: 1px solid #e5d9cd;
+  padding-bottom: 10px;
+  margin: 0 0 14px;
+}
+#pm-menu-modal .pm-menu-new {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+#pm-menu-modal .pm-menu-new input {
+  font: inherit;
+  border: 1px solid #c6b9ad;
+  border-radius: 3px;
+  padding: 8px 10px;
+}
+#pm-menu-modal .pm-menu-new input[type="text"] { flex: 1; }
+#pm-menu-modal .pm-menu-new input[type="number"] { width: 110px; }
+#pm-menu-modal table { width: 100%; border-collapse: collapse; }
+#pm-menu-modal th {
+  text-align: left;
+  background: #f4eeea;
+  color: #6b5b4b;
+  border: 1px solid #dcd0c4;
+  padding: 8px 10px;
+  font-weight: 700;
+}
+#pm-menu-modal td { border: 1px solid #dcd0c4; padding: 6px 8px; }
+#pm-menu-modal td input {
+  font: inherit;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #c6b9ad;
+  border-radius: 3px;
+  padding: 7px 8px;
+}
+#pm-menu-modal td.ops { white-space: nowrap; width: 1%; }
+#pm-menu-modal td.ops button {
+  font: inherit;
+  border: 1px solid #c6b9ad;
+  border-radius: 3px;
+  background: #fff;
+  padding: 7px 14px;
+  cursor: pointer;
+  margin-right: 6px;
+}
+#pm-menu-modal td.ops button.pm-red { border: none; }
+
+/* ---- メニュー写真（登録・差し替え・削除） ---- */
+#pm-menu-modal td.pm-menu-photo { width: 78px; text-align: center; vertical-align: middle; }
+#pm-menu-modal td.pm-menu-photo img {
+  width: 64px;
+  height: 48px;
+  object-fit: cover;
+  display: block;
+  margin: 0 auto;
+  border: 1px solid #dcd0c4;
+  border-radius: 3px;
+  background: #f4eeea;
+}
+#pm-menu-modal .pm-photo-none { color: #b3a698; font-size: 11px; white-space: nowrap; }
+#pm-menu-modal .pm-photo-pick {
+  display: inline-block;
+  border: 1px solid #c6b9ad;
+  border-radius: 3px;
+  background: #f4eeea;
+  color: #6b5b4b;
+  padding: 7px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+#pm-menu-modal .pm-photo-pick:hover { background: #ece2d8; }
+#pm-menu-modal .pm-photo-pick input[type="file"] { display: none; }
+#pm-menu-modal td.ops .pm-photo-pick { margin-right: 6px; }
+#pm-menu-modal .pm-photo-name {
+  align-self: center;
+  color: #6b5b4b;
+  font-size: 11px;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#pm-menu-modal .pm-shop-actions { margin-top: 16px; display: flex; justify-content: flex-end; }
+#pm-menu-modal .pm-shop-actions button {
+  font: inherit;
+  padding: 9px 18px;
+  border-radius: 4px;
+  border: 1px solid #c6b9ad;
+  background: #fff;
+  cursor: pointer;
+}
+#pm-menu-modal .pm-menu-new button.pm-red { border: none; border-radius: 3px; padding: 8px 18px; cursor: pointer; }
+
+/* ---- お会計（精算）モーダル：本物と同じ構成 ---- */
+#pm-checkout {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.5);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  z-index: 1100;
+  padding: 16px;
+}
+#pm-checkout section {
+  background: #fff;
+  width: min(1240px, 100%);
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.35);
+  font-size: 14px;
+  color: #333;
+}
+.pm-co-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 22px;
+  border-bottom: 1px solid #e5e5e5;
+}
+.pm-co-head b { font-size: 20px; }
+.pm-co-x {
+  font: inherit;
+  font-size: 22px;
+  color: #bbb;
+  background: none;
+  border: none;
+  cursor: pointer;
+  line-height: 1;
+}
+.pm-co-x:hover { color: #888; }
+.pm-co-body { display: flex; flex: 1; min-height: 480px; overflow: auto; }
+.pm-co-left { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.pm-co-cart { background: #e9e9e9; padding: 16px 22px 18px; }
+.pm-co-cart h3, .pm-co-add h3 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #555;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.pm-co-carticon { font-size: 22px; filter: grayscale(1); }
+.pm-co-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border: 1px solid #ddd;
+}
+.pm-co-table th {
+  text-align: left;
+  font-weight: 400;
+  color: #666;
+  padding: 12px 14px;
+  border-bottom: 1px solid #ddd;
+}
+.pm-co-table td { padding: 14px; }
+.pm-co-table td.pm-co-price { white-space: nowrap; }
+.pm-co-in { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.pm-co-in input {
+  font: inherit;
+  width: 90px;
+  text-align: right;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 8px 10px;
+  background: #fff;
+}
+.pm-co-sumrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.pm-co-bulk { background: #fff; border: 1px solid #ddd; padding: 6px 12px; gap: 12px; }
+.pm-co-subtotal { font-size: 15px; }
+.pm-co-subtotal b { font-size: 24px; margin-left: 10px; }
+.pm-co-add { padding: 18px 22px; flex: 1; }
+.pm-co-tab {
+  display: inline-block;
+  border: 1px solid #ddd;
+  border-bottom: 2px solid #fff;
+  padding: 10px 24px;
+  color: #555;
+}
+.pm-co-addspace { border-top: 1px solid #ddd; height: 120px; }
+.pm-co-right {
+  width: 330px;
+  flex: none;
+  background: #3f3f3f;
+  color: #fff;
+  padding: 10px 22px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pm-co-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 0;
+}
+.pm-co-total b { font-size: 26px; }
+.pm-co-in.dark {
+  background: #fff;
+  color: #333;
+  border-radius: 4px;
+  padding-left: 10px;
+}
+.pm-co-in.dark input {
+  background: transparent;
+  border: none;
+  color: #333;
+  width: 84px;
+  padding: 9px 8px 9px 2px;
+}
+.pm-co-in.dark.ro { background: #b5b5b5; }
+.pm-co-in.dark.ro input { background: transparent; }
+.pm-co-right .pm-co-row > .pm-co-in.dark::after { content: none; }
+.pm-co-right .pm-co-row { gap: 8px; }
+.pm-co-right .pm-co-row > span:first-child { flex: none; }
+.pm-co-yen { color: #fff; margin-left: 6px; }
+.pm-co-bottom { margin-top: auto; background: #222; margin-left: -22px; margin-right: -22px; padding: 6px 22px 10px; }
+.pm-co-cash b { font-size: 26px; }
+.pm-co-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 14px;
+  padding: 14px 22px;
+  border-top: 1px solid #e5e5e5;
+}
+.pm-co-cancel {
+  font: inherit;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  padding: 12px 26px;
+  cursor: pointer;
+}
+.pm-co-ok {
+  font: inherit;
+  font-weight: 700;
+  color: #fff;
+  background: #e9625b;
+  border: none;
+  border-radius: 5px;
+  padding: 12px 34px;
+  cursor: pointer;
+}
+.pm-co-ok:hover { background: #d45953; }
+
+/* ---- 日付ピッカー：予約状況カレンダー ---- */
+/* カレンダーは装飾が済むまで描画を保留し、最初から完成状態で出す（0.8秒で安全解除） */
+main.ledger-app .ledger-date-popover:not(.pm-cal-ready) {
+  animation: pm-ev-hold 0.01s linear 0.8s both;
+}
+.ledger-date-popover.pm-cal { width: min(400px, calc(100vw - 24px)); }
+.pm-cal .ledger-date-month,
+.pm-cal .ledger-date-days,
+.pm-cal .ledger-date-close { display: none !important; }
+#pm-caldiv { font-size: 11px; color: #333; }
+.pm-cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 10px 6px;
+  border-bottom: 1px solid #e0d6ca;
+}
+.pm-cal-head b { font-size: 13px; }
+.pm-cal-head button {
+  font: inherit;
+  font-size: 13px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #333;
+  padding: 4px 10px;
+}
+.pm-cal-week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-weight: 700;
+  padding: 5px 0;
+  color: #8a6a3a;
+}
+.pm-cal-week .sun { color: #c0392b; }
+.pm-cal-week .sat { color: #3b5bd6; }
+.pm-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border-left: 1px solid #e0d6ca;
+  border-top: 1px solid #e0d6ca;
+}
+.pm-cal-day {
+  position: relative;
+  min-height: 32px;
+  border-right: 1px solid #e0d6ca;
+  border-bottom: 1px solid #e0d6ca;
+  background: #fff;
+  padding: 3px 0 9px;
+  text-align: center;
+  cursor: pointer;
+}
+.pm-cal-day b { font-weight: 700; font-size: 11px; }
+.pm-cal-day small { color: #e8514d; font-weight: 700; margin-left: 2px; }
+.pm-cal-day.sun b { color: #c0392b; }
+.pm-cal-day.sat b { color: #3b5bd6; }
+.pm-cal-day.outside { background: #f7f1e8; }
+.pm-cal-day.outside b { color: #a8917a; }
+.pm-cal-day.past { background: #d6d6d6; }
+.pm-cal-day.green { background: #c9f2a5; }
+.pm-cal-day.sel { outline: 2px solid #e8514d; outline-offset: -2px; }
+.pm-cal-day:hover { filter: brightness(0.96); }
+.pm-cal-day .st-y, .pm-cal-day .st-r {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 4px;
+  display: block;
+}
+.pm-cal-day .st-y { bottom: 4px; background: #f9e94e; }
+.pm-cal-day .st-r { bottom: 0; background: #e8514d; }
+.pm-cal-legend {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px 10px;
+  padding: 6px 8px 3px;
+  font-size: 10px;
+}
+.pm-cal-legend .sq {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  vertical-align: -2px;
+  margin-right: 6px;
+}
+.pm-cal-legend .pm-cal-cnt { color: #e8514d; }
+
+/* お会計モーダル：スマホでは縦積みにする */
+@media (max-width: 760px) {
+  .pm-co-body { flex-direction: column; }
+  .pm-co-right { width: auto; }
+  .pm-co-add { display: none; }
+  .pm-co-cart { padding: 12px; }
+  .pm-co-table th, .pm-co-table td { padding: 8px 6px; font-size: 12px; }
+  .pm-co-table td:nth-child(2) { white-space: nowrap; }
+  .pm-co-in input { width: 64px; padding: 6px 4px; }
+  .pm-co-subtotal b { font-size: 19px; }
+}
+
+/* ---- 空き枠タップ時の左パネル（予約の登録／性別選択／休憩・業務） ---- */
+.ledger-side-form.pm-new > *:not(#pm-np) { display: none !important; }
+#pm-np { display: block; }
+.pm-np-search input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  border: 1px solid #c6b9ad;
+  border-radius: 4px;
+  padding: 10px 12px;
+  background: #fff;
+  margin-bottom: 8px;
+}
+.pm-np-searchrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #fff;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+.pm-np-searchrow label { display: flex; align-items: center; gap: 6px; }
+.pm-np-searchrow .pm-red { padding: 7px 18px !important; }
+.pm-np-card {
+  position: relative;
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px 14px 20px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.18);
+}
+.pm-np-x {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+.pm-np-time {
+  text-align: center;
+  font-weight: 700;
+  margin: 14px 0 14px;
+  color: #333;
+}
+.pm-np-time b { color: #e9625b; margin-left: 6px; }
+.pm-np-bar {
+  background: #f4eeea;
+  color: #333;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+  margin: 12px -14px;
+  padding: 10px 0;
+}
+.pm-np-sub { text-align: center; font-weight: 700; margin: 14px 0; }
+.pm-np-gender {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  margin-bottom: 6px;
+}
+.pm-np-gender button {
+  font: inherit;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 14px 16px;
+  cursor: pointer;
+}
+.pm-np-gender button:hover { background: #f7f1e8; }
+.pm-np-kind {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 16px;
+}
+.pm-np-kind .pm-red {
+  font-weight: 700;
+  border-radius: 6px !important;
+  padding: 12px 22px !important;
+}
+
+/* ---- 休憩・業務・新規予約フォーム：PM調の白カードに統一 ---- */
+main.ledger-app .ledger-side.pm-side:has(.pm-form) { background: #987050; border-color: #7c5a3f; }
+main.ledger-app .pm-side:has(.pm-form) .ledger-side-search { display: none !important; }
+.ledger-side-form.pm-form {
+  background: #fff;
+  border-radius: 8px;
+  margin: 10px;
+  padding: 0 14px 16px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.18);
+}
+.ledger-side-form.pm-form > h2 {
+  background: #f4eeea;
+  color: #333;
+  text-align: center;
+  font-size: 15px;
+  margin: 0 -14px 12px;
+  padding: 11px 0;
+  border-radius: 8px 8px 0 0;
+}
+.pm-form label { font-weight: 700; }
+.pm-form select,
+.pm-form textarea,
+.pm-form input {
+  border: 1px solid #c6b9ad;
+  border-radius: 4px;
+  background: #fff;
+}
+.pm-form .ledger-duration button {
+  border: 1px solid #c6b9ad;
+  border-radius: 4px;
+  background: #fff;
+}
+.pm-form .ledger-duration button.selected {
+  background: #987050;
+  color: #fff;
+  border-color: #987050;
+}
+.pm-form .ledger-form-actions .ledger-save {
+  background: #e9625b;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  font-weight: 700;
+  padding: 10px 24px;
+}
+.pm-form .ledger-form-actions .ledger-save:hover { background: #d45953; }
+.pm-form .ledger-form-actions button:not(.ledger-save) {
+  border: 1px solid #c6b9ad;
+  border-radius: 5px;
+  background: #fff;
+  padding: 10px 18px;
+}
+
+
+/* ---- 本物の台帳画像に合わせた細部 ---- */
+/* 警告アイコン（バッジの外の⚠）と数字バッジ */
+.pm-warn { margin-left: auto; font-size: 15px; line-height: 1; }
+.pm-alert { margin-left: 6px; }
+
+/* 再読込ボタン：2本矢印の円形アイコン */
+main.ledger-app .ledger-toolbar > .ledger-refresh {
+  color: transparent !important;
+  background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="%23e8590c" d="M12 5a7 7 0 0 1 6.3 4h-2.5l3.6 4 3.6-4h-2.6A9 9 0 0 0 12 3a9 9 0 0 0-7.7 4.3l1.7 1A7 7 0 0 1 12 5Z"/><path fill="%23e8590c" d="M12 19a7 7 0 0 1-6.3-4h2.5L4.6 11 1 15h2.6A9 9 0 0 0 12 21a9 9 0 0 0 7.7-4.3l-1.7-1A7 7 0 0 1 12 19Z"/></svg>') center / 26px 26px no-repeat !important;
+  border: 0 !important;
+}
+
+/* 時計表示を画像と同じ大きさに */
+main.ledger-app .ledger-clock { font-size: 16px; font-weight: 700; }
+
+/* 点線メッセージエリア（日付またぎの案内） */
+main.ledger-app .ledger-modes span {
+  border: 1px dashed #a9a29a;
+  color: #555;
+  text-align: center;
+}
+
+/* 台帳下のボタン列 */
+.pm-ub-cat { padding: 10px 0 2px; }
+.pm-ub-cat button, .pm-ub-row button {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  background: #fff;
+  border: 1px solid #b5b5b5;
+  border-radius: 3px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.pm-ub-row { display: flex; gap: 10px; padding: 8px 0 4px; }
+.pm-ub-row button { padding: 8px 18px; }
+
+/* 下部集計（4行構成） */
+main.ledger-app .ledger-summary:not([hidden]) { display: block; background: #fff; padding: 10px 16px; }
+.pm-ub-btn {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  background: #fff !important;
+  border: 1px solid #b5b5b5 !important;
+  border-radius: 3px;
+  padding: 8px 16px !important;
+  height: auto !important;
+}
+.pm-sum { display: flex; flex-wrap: wrap; gap: 4px 26px; font-weight: 700; font-size: 13px; padding: 4px 0; }
+.pm-sum-red { color: #e02020; }
+.pm-sum-blue { color: #1a6fc9; }
+
+/* 予約・休憩・業務ブロックは行の枠にぴったり収める（高さいっぱい・時間幅どおり） */
+main.ledger-app .ledger-event {
+  top: 0 !important;
+  bottom: 0 !important;
+  height: auto !important;
+  margin: 0 !important;
+}
+
+/* 予約ブロックの本物表示（3行＋バッジ＋色分け） */
+main.ledger-app .ledger-event.pm-ev { padding: 1px 3px !important; line-height: 12px !important; }
+main.ledger-app .ledger-event.pm-ev .pm-ev-l1,
+main.ledger-app .ledger-event.pm-ev .pm-ev-l2,
+main.ledger-app .ledger-event.pm-ev .pm-ev-l3 {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 10px;
+  line-height: 12px;
+}
+.pm-bg {
+  display: inline-block;
+  font-style: normal;
+  font-size: 9px;
+  line-height: 11px;
+  color: #fff;
+  border-radius: 2px;
+  padding: 0 2px;
+  margin-right: 2px;
+  vertical-align: top;
+}
+.pm-bg-m { background: #3b7ddd; }
+.pm-bg-f { background: #e8506e; }
+.pm-bg-multi { background: #b58900; }
+.pm-bg-new { background: #f08300; }
+.pm-bg-nom { background: #e8514d; }
+.pm-bg-mi { background: #8e8e8e; float: right; margin-right: 0; }
+.pm-bg-hp { background: #f4511e; }
+.pm-bg-tk { background: #7a5ea8; }
+
+/* 回数券管理モーダル */
+#pm-ticket-modal, #pm-account-modal { position: fixed; inset: 0; background: rgb(0 0 0 / 0.45); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+#pm-ticket-modal section, #pm-account-modal section {
+  background: #fff; border-radius: 6px; width: min(1000px, calc(100vw - 32px));
+  max-height: calc(100vh - 60px); overflow: auto; padding: 22px 24px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.25); font-size: 13px; color: #292929;
+}
+#pm-ticket-modal h2, #pm-account-modal h2 { margin: 0 0 6px; font-size: 20px; }
+#pm-ticket-modal .pm-shop-sub, #pm-account-modal .pm-shop-sub { color: #6b5b4b; border-bottom: 1px solid #e5d9cd; padding-bottom: 10px; margin: 0 0 14px; }
+#pm-ticket-modal .pm-tk-h, #pm-account-modal .pm-tk-h { font-size: 14px; color: #8a6a33; margin: 16px 0 8px; }
+#pm-ticket-modal .pm-menu-new, #pm-account-modal .pm-menu-new { display: flex; gap: 8px; margin-bottom: 10px; }
+#pm-ticket-modal .pm-menu-new input[type="text"], #pm-account-modal .pm-menu-new input[type="text"] { flex: 1; }
+#pm-ticket-modal input, #pm-account-modal input { font: inherit; padding: 7px 9px; border: 1px solid #cfc6b8; border-radius: 4px; }
+#pm-ticket-modal input[type="number"], #pm-account-modal input[type="number"] { width: 92px; }
+#pm-ticket-modal .pm-menu-item, #pm-account-modal .pm-menu-item { display: flex; gap: 8px; align-items: center; padding: 7px 0; border-bottom: 1px solid #eee3d5; }
+#pm-ticket-modal .pm-menu-item .tk-name, #pm-account-modal .pm-menu-item .tk-name { flex: 1; }
+#pm-ticket-modal .pm-tk-cap, #pm-account-modal .pm-tk-cap { color: #8a7a68; font-size: 12px; white-space: nowrap; }
+#pm-ticket-modal .pm-tk-pub, #pm-account-modal .pm-tk-pub { white-space: nowrap; font-weight: 700; }
+#pm-ticket-modal .pm-tk-fixed, #pm-account-modal .pm-tk-fixed { white-space: nowrap; color: #8a6a33; font-size: 12px; align-self: center; }
+#pm-ticket-modal button, #pm-account-modal button { font: inherit; padding: 7px 14px; border-radius: 4px; border: 1px solid #cfc6b8; background: #fff; cursor: pointer; }
+#pm-ticket-modal button.pm-red, #pm-account-modal button.pm-red { background: #e8514d; border-color: #d8443f; color: #fff; font-weight: 700; }
+#pm-ticket-modal .pm-tk-table, #pm-account-modal .pm-tk-table { width: 100%; border-collapse: collapse; }
+#pm-ticket-modal .pm-tk-table th, #pm-ticket-modal .pm-tk-table td, #pm-account-modal .pm-tk-table th, #pm-account-modal .pm-tk-table td { border: 1px solid #e5d9c8; padding: 7px 9px; text-align: left; }
+#pm-ticket-modal .pm-tk-table th, #pm-account-modal .pm-tk-table th { background: #f4ecdf; color: #6b4f2a; }
+#pm-ticket-modal .pm-tk-histrow td, #pm-account-modal .pm-tk-histrow td { background: #faf6ef; color: #555; font-size: 12px; line-height: 1.9; }
+#pm-ticket-modal .pm-tk-empty, #pm-account-modal .pm-tk-empty { color: #999; }
+#pm-ticket-modal .pm-shop-actions, #pm-account-modal .pm-shop-actions { margin-top: 14px; text-align: right; }
+/* お客様の枠は最初から最終の色で表示する（描画後に色が切り替わって見えないよう、
+   色分け前の枠はごく短時間だけ描画を保留し、色分けが済んだ瞬間にその色で現れる） */
+main.ledger-app .ledger-event:not(.pm-ev):not(.activity) {
+  animation: pm-ev-hold 0.01s linear 0.8s both;
+}
+@keyframes pm-ev-hold { from { opacity: 0; } to { opacity: 1; } }
+
+main.ledger-app .ledger-event.pm-ev-green { background: #b2ec78 !important; border-color: #8fc356 !important; }
+main.ledger-app .ledger-event.pm-ev-lime { background: #eef98a !important; border-color: #c3cf5f !important; }
+main.ledger-app .ledger-event.pm-ev-purple { background: #bcb6ff !important; border-color: #a98ec0 !important; }
+main.ledger-app .ledger-event.pm-ev-red { background: #f28b80 !important; border-color: #d96a60 !important; }
+
+
+/* ---- 予約の移動（スタッフ振り分け）：成立する候補だけを選ばせる ---- */
+.pm-move {
+  margin-top: 8px;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid #d9d2c7;
+  border-radius: 4px;
+}
+.pm-move-title { font-weight: 700; font-size: 12px; margin-bottom: 6px; color: #6b4f3a; }
+.pm-move-row { display: flex; gap: 6px; }
+.pm-move-row select {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  padding: 4px;
+  border: 1px solid #c9c2b8;
+  border-radius: 3px;
+  background: #fff;
+}
+.pm-move-note { font-size: 10px; color: #8a8a8a; margin: 6px 0 0; line-height: 1.5; }
+
+/* ---- 左パネルはなめらかにスライドイン ---- */
+main.ledger-app .ledger-side { animation: pm-side-in 0.18s ease-out; }
+@keyframes pm-side-in {
+  from { opacity: 0; transform: translateX(-14px); }
+  to { opacity: 1; transform: none; }
+}
+
+
+/* ---- シフト新規登録モーダル（本物と同じレイアウト） ---- */
+#pm-shiftadd {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.25);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 120px;
+  z-index: 1200;
+}
+#pm-shiftadd .pm-sa-modal {
+  background: #fff;
+  border: 2px solid #b98d5f;
+  border-radius: 10px;
+  width: min(560px, calc(100vw - 40px));
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.3);
+  font-size: 14px;
+  color: #333;
+}
+#pm-shiftadd .pm-sa-head {
+  background: #fbe9b7;
+  color: #5c4322;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  font-size: 16px;
+}
+#pm-shiftadd .pm-sa-x {
+  font: inherit;
+  background: none;
+  border: none;
+  color: #5c4322;
+  font-size: 17px;
+  cursor: pointer;
+  padding: 0 2px;
+}
+#pm-shiftadd .pm-sa-body { padding: 16px 18px 14px; }
+#pm-shiftadd .pm-sa-staffrow select {
+  font: inherit;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid #cbb490;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 1px 6px rgb(0 0 0 / 0.15);
+}
+#pm-shiftadd .pm-sa-timerow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+#pm-shiftadd .pm-sa-cap { font-weight: 700; width: 64px; }
+#pm-shiftadd .pm-sa-timerow select {
+  font: inherit;
+  min-width: 120px;
+  padding: 9px 10px;
+  border: 1px solid #d5d5d5;
+  border-radius: 6px;
+  background: #ececec;
+}
+#pm-shiftadd .pm-sa-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
+#pm-shiftadd .pm-sa-ok {
+  font: inherit;
+  font-weight: 700;
+  background: #f4f4f4;
+  border: 1px solid #9a9a9a;
+  border-radius: 6px;
+  padding: 7px 16px;
+  cursor: pointer;
+}
+#pm-shiftadd .pm-sa-ok:hover { background: #e9e9e9; }
+
+
+/* ---- 予約枠ホバーの詳細ツールチップ ---- */
+#pm-evtip {
+  position: fixed;
+  z-index: 1500;
+  background: rgb(216 216 216 / 0.97);
+  color: #222;
+  font-size: 13px;
+  line-height: 1.95;
+  padding: 14px 20px;
+  min-width: 330px;
+  max-width: 460px;
+  border-radius: 2px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.28);
+  pointer-events: none;
+  word-break: break-all;
+}
+
+/* アカウント管理（ユーザ情報）固有 */
+#pm-account-modal select { font: inherit; padding: 6px 8px; border: 1px solid #cfc6b8; border-radius: 4px; background: #fff; }
+#pm-account-modal .pm-ac-lograw { max-height: 180px; overflow: auto; font-size: 12px; line-height: 1.9; color: #6b5b4b; background: #faf6f0; border: 1px solid #eee3d5; border-radius: 6px; padding: 8px 10px; }
+#pm-account-modal .pm-menu-new input[type="password"] { flex: 1; }
