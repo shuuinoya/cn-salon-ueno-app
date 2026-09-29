@@ -18,6 +18,8 @@ services:
         sync: false
       - key: GH_TOKEN       # GitHubのFine-grained token（対象リポジトリのContents: Read and write）
         sync: false
+      - key: ADMIN_PASS_HASH # 本番の管理者パスワード（SHA-256ハッシュ）
+        sync: false
 # ─────────────────────────────────────────────
 # 【有料版に切り替える場合】plan: starter にして下を有効化すると、
 # GitHub同期の代わりに永続ディスクへ保存されます（どちらでも動作します）
