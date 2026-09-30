@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>マイページ | CN Ueno health & beauty</title>
 <link rel="icon" href="/favicon.svg"/>
+<link rel="stylesheet" href="/_next/static/css/index.BFcGkxEb.css">
 <style>
   /* 予約サイトと同じトーンのマイページ（画像のレイアウトに合わせた構成） */
   * { box-sizing: border-box; }
@@ -15,19 +16,6 @@
     font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", Arial, sans-serif;
     font-size: 15px;
   }
-  header.site {
-    background: #fff;
-    border-bottom: 1px solid #e5e7eb;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 20px;
-  }
-  header.site img { width: 46px; height: 46px; object-fit: cover; border-radius: 4px; }
-  header.site b { font-size: 17px; }
-  header.site nav { margin-left: auto; display: flex; align-items: center; gap: 28px; }
-  header.site nav a { color: #4b5563; text-decoration: none; font-size: 13px; font-weight: 700; line-height: 1; }
-  header.site nav a:hover { color: #b08d4f; }
   .tabs {
     display: flex;
     gap: 22px;
@@ -105,22 +93,13 @@
   .cancel:hover { background: #fbe6e4; }
   .empty { color: #6b7280; padding: 26px 22px; }
   @media (max-width: 640px) {
-    header.site nav { display: none; }
-    main { padding: 12px 12px 40px; }
+    main { padding: 12px 12px 96px; }
     .rowline { gap: 14px; }
   }
 </style>
 </head>
 <body>
-  <header class="site">
-    <img src="/images/logo.jpg.webp" alt=""/>
-    <b>CN Ueno health &amp; beauty</b>
-    <nav>
-      <a href="/" id="nav-home">ホーム</a>
-      <a href="/book" id="nav-book">予約</a>
-      <a href="/menus" id="nav-menu">メニュー</a>
-    </nav>
-  </header>
+  <header class="site-header"><div class="header-inner"><a href="/" class="brand"><img src="/images/logo.jpg.webp" alt=""/><h1>CN Ueno health & beauty</h1></a><nav class="desktop-nav" aria-label="メインメニュー"><a href="/" class="nav-item"><svg viewBox="0 0 256 256" aria-hidden="true" class="nav-icon"><path d="M218.83 103.77 138.83 28.29a16 16 0 0 0-21.64 0L37.17 103.77A16 16 0 0 0 32 115.55V208a16 16 0 0 0 16 16h48a16 16 0 0 0 16-16v-48h32v48a16 16 0 0 0 16 16h48a16 16 0 0 0 16-16v-92.45a16 16 0 0 0-5.17-11.78ZM208 208h-48v-48a16 16 0 0 0-16-16h-32a16 16 0 0 0-16 16v48H48v-92.45L128 40l80 75.53Z"></path></svg><span>ホーム</span></a><a href="/book" class="nav-item"><svg viewBox="0 0 256 256" aria-hidden="true" class="nav-icon"><path d="M208 32h-24v-8a8 8 0 0 0-16 0v8H88v-8a8 8 0 0 0-16 0v8H48a16 16 0 0 0-16 16v160a16 16 0 0 0 16 16h160a16 16 0 0 0 16-16V48a16 16 0 0 0-16-16Zm0 176H48V96h160Zm0-128H48V48h24v8a8 8 0 0 0 16 0v-8h80v8a8 8 0 0 0 16 0v-8h24Z"></path></svg><span>予約</span></a><a href="/menus" class="nav-item"><svg viewBox="0 0 256 256" aria-hidden="true" class="nav-icon"><path d="M208 116v36a80 80 0 0 1-160 0V76a20 20 0 0 1 40 0V44a20 20 0 0 1 40 0v16a20 20 0 0 1 40 0v56a20 20 0 0 1 40 0Z" opacity=".2"></path><path d="M188 88a27.75 27.75 0 0 0-12 2.71V60a28 28 0 0 0-41.36-24.6A28 28 0 0 0 80 44v6.71A28 28 0 0 0 40 76v76a88 88 0 0 0 176 0v-36a28 28 0 0 0-28-28Zm12 64a72 72 0 0 1-144 0V76a12 12 0 0 1 24 0v44a8 8 0 0 0 16 0V44a12 12 0 0 1 24 0v68a8 8 0 0 0 16 0V60a12 12 0 0 1 24 0v68.67A48.08 48.08 0 0 0 120 176a8 8 0 0 0 16 0 32 32 0 0 1 32-32 8 8 0 0 0 8-8v-20a12 12 0 0 1 24 0Z"></path></svg><span>メニュー</span></a><a href="/map" class="nav-item"><svg viewBox="0 0 256 256" aria-hidden="true" class="nav-icon"><path d="M128 64a40 40 0 1 0 40 40 40 40 0 0 0-40-40Zm0 64a24 24 0 1 1 24-24 24 24 0 0 1-24 24Zm0-112a88.1 88.1 0 0 0-88 88c0 31.4 14.51 64.68 42 96.25a254.19 254.19 0 0 0 41.45 38.3 8 8 0 0 0 9.18 0A254.19 254.19 0 0 0 174 200.25c27.45-31.57 42-64.85 42-96.25A88.1 88.1 0 0 0 128 16Zm0 206c-16.53-13-72-60.75-72-118a72 72 0 0 1 144 0c0 57.23-55.47 105-72 118Z"></path></svg><span>マップ</span></a></nav><div class="header-actions"><a href="/login" class="login-button"><svg viewBox="0 0 256 256" aria-hidden="true" class="small-icon"><path d="M230.92 212c-15.23-26.33-38.7-45.21-66.09-54.16a72 72 0 1 0-73.66 0C63.78 166.78 40.31 185.66 25.08 212a8 8 0 1 0 13.85 8c18.84-32.56 52.14-52 89.07-52s70.23 19.44 89.07 52a8 8 0 1 0 13.85-8ZM72 96a56 56 0 1 1 56 56 56.06 56.06 0 0 1-56-56Z"></path></svg><b>ログイン</b></a></div></div></header>
   <div class="tabs">
     <a href="#home" id="tab-home">ホーム</a>
     <a href="#resv" id="tab-resv">予約情報</a>
@@ -265,7 +244,6 @@
     document.getElementById("tab-home").textContent = t.home;
     document.getElementById("tab-resv").textContent = t.resv;
     document.getElementById("tab-member").textContent = t.member;
-    document.getElementById("nav-home").textContent = t.home;
     document.getElementById("tab-tickets").textContent = pageLang === "en" ? "Tickets" : "回数券";
     const tab = (location.hash || "#home").slice(1);
     for (const id of ["home", "resv", "member", "tickets"]) {
@@ -396,5 +374,6 @@
   loadAll().then(render);
 })();
 </script>
+  <nav class="mobile-nav" aria-label="モバイルメニュー"><a href="/" class="mobile-item"><svg viewBox="0 0 256 256" aria-hidden="true" class="nav-icon"><path d="M218.83 103.77 138.83 28.29a16 16 0 0 0-21.64 0L37.17 103.77A16 16 0 0 0 32 115.55V208a16 16 0 0 0 16 16h48a16 16 0 0 0 16-16v-48h32v48a16 16 0 0 0 16 16h48a16 16 0 0 0 16-16v-92.45a16 16 0 0 0-5.17-11.78ZM208 208h-48v-48a16 16 0 0 0-16-16h-32a16 16 0 0 0-16 16v48H48v-92.45L128 40l80 75.53Z"></path></svg><small>ホーム</small></a><a href="/book" class="mobile-item"><svg viewBox="0 0 256 256" aria-hidden="true" class="nav-icon"><path d="M208 32h-24v-8a8 8 0 0 0-16 0v8H88v-8a8 8 0 0 0-16 0v8H48a16 16 0 0 0-16 16v160a16 16 0 0 0 16 16h160a16 16 0 0 0 16-16V48a16 16 0 0 0-16-16Zm0 176H48V96h160Zm0-128H48V48h24v8a8 8 0 0 0 16 0v-8h80v8a8 8 0 0 0 16 0v-8h24Z"></path></svg><small>予約</small></a><a href="/menus" class="mobile-item"><svg viewBox="0 0 256 256" aria-hidden="true" class="nav-icon"><path d="M208 116v36a80 80 0 0 1-160 0V76a20 20 0 0 1 40 0V44a20 20 0 0 1 40 0v16a20 20 0 0 1 40 0v56a20 20 0 0 1 40 0Z" opacity=".2"></path><path d="M188 88a27.75 27.75 0 0 0-12 2.71V60a28 28 0 0 0-41.36-24.6A28 28 0 0 0 80 44v6.71A28 28 0 0 0 40 76v76a88 88 0 0 0 176 0v-36a28 28 0 0 0-28-28Zm12 64a72 72 0 0 1-144 0V76a12 12 0 0 1 24 0v44a8 8 0 0 0 16 0V44a12 12 0 0 1 24 0v68a8 8 0 0 0 16 0V60a12 12 0 0 1 24 0v68.67A48.08 48.08 0 0 0 120 176a8 8 0 0 0 16 0 32 32 0 0 1 32-32 8 8 0 0 0 8-8v-20a12 12 0 0 1 24 0Z"></path></svg><small>メニュー</small></a><a href="/map" class="mobile-item"><svg viewBox="0 0 256 256" aria-hidden="true" class="nav-icon"><path d="M128 64a40 40 0 1 0 40 40 40 40 0 0 0-40-40Zm0 64a24 24 0 1 1 24-24 24 24 0 0 1-24 24Zm0-112a88.1 88.1 0 0 0-88 88c0 31.4 14.51 64.68 42 96.25a254.19 254.19 0 0 0 41.45 38.3 8 8 0 0 0 9.18 0A254.19 254.19 0 0 0 174 200.25c27.45-31.57 42-64.85 42-96.25A88.1 88.1 0 0 0 128 16Zm0 206c-16.53-13-72-60.75-72-118a72 72 0 0 1 144 0c0 57.23-55.47 105-72 118Z"></path></svg><small>マップ</small></a></nav>
 </body>
 </html>
