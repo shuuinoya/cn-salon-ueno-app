@@ -1849,7 +1849,9 @@ function handleDemoApi(req, res, url) {
     req.on("end", () => {
       let b = {};
       try { b = JSON.parse(raw || "{}"); } catch {}
-      const user = String(b.user || "").slice(0, 40);
+      // 日本語入力の全角＠は半角@として扱う（IMEの打ち間違いでロックさせない）
+      const jz = (v) => String(v || "").replace(/＠/g, "@").replace(/　/g, " ").trim();
+      const user = jz(b.user).slice(0, 40);
       const ip = req.socket.remoteAddress || "";
       // 連続失敗によるロック（総当たり対策）
       const lock = state.loginFails.get(user);
@@ -1860,7 +1862,7 @@ function handleDemoApi(req, res, url) {
       }
       const acc = state.accounts.get(user);
       // 停止中アカウントも「存在しない」と同じ応答にする（存在の推測をさせない）
-      if (acc && acc.active && acc.pass === hashPass(String(b.pass || ""))) {
+      if (acc && acc.active && (acc.pass === hashPass(String(b.pass || "")) || acc.pass === hashPass(jz(b.pass)))) {
         state.loginFails.delete(user);
         const token = crypto.randomBytes(24).toString("hex"); // 端末ごとに独立したセッション
         adminSessions.set(token, { user, created: Date.now() });
@@ -1966,7 +1968,7 @@ function handleDemoApi(req, res, url) {
           [...state.accounts.values()].filter((a) => a.active && a.role === "admin" && a.user !== user).length;
         if (b.action === "add") {
           const user = String(b.user || "").trim();
-          if (!/^[a-zA-Z0-9_-]{4,20}$/.test(user)) return bad("badUser");
+          if (!/^[A-Za-z0-9@._-]{4,30}$/.test(user)) return bad("badUser");
           if (state.accounts.has(user)) return bad("userExists");
           if (String(b.pass || "").length < 8) return bad("shortPass");
           if (!ROLE_LV[b.role]) return bad("badRole");
