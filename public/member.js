@@ -1,5 +1,5 @@
 // 予約サイトの会員ログイン／新規会員登録
-// ・右上の「ログイン」→ モーダル（メールアドレス・パスワード・パスワードを忘れた方・ソーシャルログイン）。
+// ・右上の「ログイン」→ モーダル（メールアドレス・パスワード・パスワードを忘れた方）。ソーシャルログインは使わない。
 //   「はじめての方は新規会員登録」から、お名前・メールアドレス・パスワードで会員登録できる
 // ・トップ等の右の列（.side-column）にも同じログイン欄を出す（本物のサイトと同じ配置）。
 //   ログイン中は会員メニュー（マイページ・回数券の残り回数・ログアウト）になる
@@ -17,8 +17,7 @@
   const en = lang === "en";
   const T = en ? {
     login: "Log in", mypage: "My page", email: "Email address", pass: "Password",
-    forgot: "Forgot your password?", social: "Social login", cancel: "Cancel",
-    with: (s) => "Log in with " + s,
+    forgot: "Forgot your password?", cancel: "Cancel",
     toRegister: "New here? Create a free account", toRegisterShort: "Sign up (free)",
     toLogin: "Already a member? Log in",
     register: "Create account", registerTitle: "Sign up (free)",
@@ -35,13 +34,11 @@
     fail: "Could not complete. Please try again later.",
     resetAsk: "Enter your registered email address. We will send a temporary password.",
     resetDone: "If the address is registered, a temporary password has been sent.",
-    socialSoon: "Social login is coming soon. Please log in with your email address.",
     heading: "Log in", member: "Member menu", hello: (n) => (n ? n + " " : "") + "(member)",
     tickets: "Your tickets", noTickets: "No tickets yet", left: (n) => n + " left", logout: "Log out", seeTickets: "Tickets",
   } : {
     login: "ログイン", mypage: "マイページ", email: "メールアドレス", pass: "パスワード",
-    forgot: "パスワードを忘れた方はこちら", social: "ソーシャルログイン", cancel: "キャンセル",
-    with: (s) => s + "でログイン",
+    forgot: "パスワードを忘れた方はこちら", cancel: "キャンセル",
     toRegister: "はじめての方は新規会員登録（無料）", toRegisterShort: "新規会員登録（無料）",
     toLogin: "会員の方はこちら（ログイン）",
     register: "登録する", registerTitle: "新規会員登録（無料）",
@@ -58,7 +55,6 @@
     fail: "処理できませんでした。時間をおいてお試しください。",
     resetAsk: "ご登録のメールアドレスを入力してください。仮パスワードをお送りします。",
     resetDone: "ご登録のアドレスであれば、仮パスワードをお送りしました。メールをご確認ください。",
-    socialSoon: "ソーシャルログインは準備中です。メールアドレスでログインしてください。",
     heading: "ログイン", member: "会員メニュー", hello: (n) => (n ? n + " 様" : "会員様"),
     tickets: "保有中の回数券", noTickets: "保有中の回数券はありません", left: (n) => "残り " + n + "回", logout: "ログアウト", seeTickets: "回数券を見る・購入する",
   };
@@ -92,20 +88,15 @@
     ".cn-switch{display:flex;align-items:center;justify-content:center;width:100%;min-height:48px;margin:12px 0 6px;border:1px solid #c5a15e;border-radius:8px;background:#fff;color:#8a6a33;font-size:16px;font-weight:700;cursor:pointer}" +
     ".cn-note{font-size:12.5px;color:#777;line-height:1.7;margin:4px 0 8px}" +
     ".cn-err{color:#c0392b;font-size:14px;margin:-4px 0 10px;white-space:pre-line}" +
-    ".cn-social{padding:18px 22px;border-top:1px solid #e6e6e6}.cn-social h3{margin:0 0 16px;font-size:18px;font-weight:700}" +
-    ".cn-sb{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;height:56px;border:1px solid #cfcfcf;border-radius:10px;background:#fff;font-size:18px;font-weight:600;color:#222;cursor:pointer;margin-bottom:12px}" +
-    ".cn-sb svg{width:24px;height:24px;flex:none}.cn-sb b{font-size:22px;color:#7cb518;font-weight:800;line-height:1}" +
     ".cn-lfoot{padding:18px 22px;border-top:1px solid #e6e6e6;text-align:center}" +
     ".cn-cancel{border:1px solid #9a9a9a;background:#fff;border-radius:8px;padding:14px 34px;font-size:17px;color:#333;cursor:pointer}" +
-    ".cn-inline .cn-lf{padding:6px 22px 0}.cn-inline .cn-social{padding:16px 22px 14px}" +
+    ".cn-inline .cn-lf{padding:6px 22px 16px}" +
     // 右の列（幅240px）のログイン欄・会員メニュー：既存の side-login-card の見た目のまま中身だけ
-    ".cn-side .cn-lf{padding:14px 16px 4px}.cn-side .cn-lf label{font-size:14px;margin-bottom:10px}" +
+    ".cn-side .cn-lf{padding:14px 16px 16px}.cn-side .cn-lf label{font-size:14px;margin-bottom:10px}" +
     ".cn-side .cn-in{height:42px;margin-top:6px;padding:0 10px}.cn-side .cn-in input{font-size:15px}.cn-side .cn-in svg{width:17px;height:17px;margin-right:8px}" +
     ".cn-side .cn-gold{height:42px;font-size:15px;border-radius:4px}.cn-side .cn-forgot{font-size:12.5px;margin:10px 0 4px}" +
     ".cn-side .cn-switch{min-height:40px;font-size:13px;border-radius:4px;margin:8px 0 4px}" +
     ".cn-side .cn-note{font-size:11.5px}.cn-side .cn-err{font-size:12.5px}" +
-    ".cn-side .cn-social{padding:12px 16px 14px}.cn-side .cn-social h3{font-size:14px;margin-bottom:10px}" +
-    ".cn-side .cn-sb{height:42px;font-size:13px;gap:8px;border-radius:5px;margin-bottom:8px}.cn-side .cn-sb svg{width:18px;height:18px}.cn-side .cn-sb b{font-size:16px}" +
     ".cn-side-member{padding:14px 16px 16px;font-size:14px;line-height:1.7}" +
     ".cn-side-member .cn-hello{font-weight:700;margin:0 0 8px}" +
     ".cn-side-member ul{list-style:none;margin:0 0 10px;padding:0}.cn-side-member li{display:flex;justify-content:space-between;gap:8px;border-bottom:1px dashed #e6e0d6;padding:4px 0;font-size:13px}" +
@@ -114,7 +105,7 @@
     ".cn-side-member .cn-mp{background:#c5a15e;color:#fff;border:0;font-weight:700}" +
     ".cn-side-member .cn-tk{border:1px solid #c5a15e;color:#8a6a33;background:#fff}" +
     ".cn-side-member .cn-out{border:1px solid #d1d5db;color:#555;background:#fff}" +
-    "@media (max-width:480px){#cn-login-ov{padding:12px 10px}.cn-login-card .cn-lf,.cn-login-card .cn-social,.cn-lh,.cn-lfoot{padding-left:18px;padding-right:18px}}";
+    "@media (max-width:480px){#cn-login-ov{padding:12px 10px}.cn-login-card .cn-lf,.cn-lh,.cn-lfoot{padding-left:18px;padding-right:18px}}";
   function ensureStyle() {
     if (document.getElementById("cn-login-style")) return;
     const st = document.createElement("style");
@@ -126,8 +117,6 @@
   const ICON_MAIL = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>';
   const ICON_LOCK = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0"/></svg>';
   const ICON_USER = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>';
-  const ICON_G = '<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.3l7.9 6.1C12.4 13.4 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.2 5.5-4.7 7.2l7.6 5.9c4.4-4.1 6.9-10.1 6.9-17.6z"/><path fill="#FBBC05" d="M10.5 28.6A14.5 14.5 0 0 1 9.7 24c0-1.6.3-3.1.8-4.6l-7.9-6.1A24 24 0 0 0 0 24c0 3.9.9 7.5 2.6 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.3 0-11.6-3.9-13.5-9.3l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>';
-  const ICON_APPLE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#000" d="M16.4 12.7c0-2.5 2-3.7 2.1-3.8-1.2-1.7-3-1.9-3.6-2-1.5-.2-3 .9-3.8.9-.8 0-2-.9-3.3-.8-1.7 0-3.2 1-4.1 2.5-1.8 3.1-.5 7.6 1.3 10.1.9 1.2 1.9 2.6 3.2 2.5 1.3-.1 1.8-.8 3.3-.8s2 .8 3.3.8c1.4 0 2.3-1.2 3.1-2.5.9-1.4 1.3-2.7 1.4-2.8-.1 0-2.9-1.1-2.9-4.1zM14 5.3c.7-.8 1.2-2 1-3.1-1 0-2.2.7-2.9 1.5-.6.7-1.2 1.9-1 3 1.1.1 2.2-.6 2.9-1.4z"/></svg>';
 
   // ログイン（mode="login"）／新規会員登録（mode="register"）のフォーム
   function authHtml(mode) {
@@ -155,12 +144,7 @@
       '<button type="submit" class="cn-gold">' + T.login + "</button>" +
       '<a href="#" class="cn-forgot">' + T.forgot + "</a>" +
       '<button type="button" class="cn-switch" data-to="register">' + T.toRegister + "</button>" +
-      "</form>" +
-      '<div class="cn-social"><h3>' + T.social + "</h3>" +
-      '<button type="button" class="cn-sb" data-social="Google">' + ICON_G + "<span>" + T.with("Google") + "</span></button>" +
-      '<button type="button" class="cn-sb" data-social="Apple">' + ICON_APPLE + "<span>" + T.with("Apple") + "</span></button>" +
-      '<button type="button" class="cn-sb" data-social="EPARK"><b>E</b><span>' + T.with("EPARK") + "</span></button>" +
-      "</div>"
+      "</form>"
     );
   }
 
@@ -224,7 +208,6 @@
       } catch {}
       window.alert(T.resetDone);
     });
-    container.querySelectorAll(".cn-sb").forEach((b) => b.addEventListener("click", () => window.alert(T.socialSoon)));
   }
 
   function open(mode) {
