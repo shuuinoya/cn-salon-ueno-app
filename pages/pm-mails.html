@@ -98,6 +98,14 @@
   .status-sending { color: #2a6fb0; font-weight: 700; }
   .status-accepted { color: #3f9b45; font-weight: 700; }
   .status-failed { color: #c0392b; font-weight: 700; }
+  .status-skipped { color: #7a7a7a; font-weight: 700; }
+  .b-ticket { background: #b07cc6; }
+  .b-ticketRemind { background: #c27a2c; }
+  .b-member { background: #6f8f8a; }
+  /* 送信時点の回数券情報（メール本文に載せた値＝この時点のデータベースの値） */
+  .tksnap { background: #faf6f0; border: 1px solid #eee3d5; border-radius: 6px; padding: 8px 12px; margin: 6px 0 10px; font-size: 13px; line-height: 1.8; }
+  .tksnap b { color: #6b4f2a; }
+  .tksnap .note { color: #8d8d8d; font-size: 12px; }
   .mail-error { color: #c0392b; margin: 6px 0 0; }
   .mailbody {
     border-top: 1px dashed #c6b9ad;
@@ -163,7 +171,22 @@
     remind:  ["リマインド", "b-remind"],
     change:  ["変更通知", "b-change"],
     cancel:  ["取消通知", "b-cancel"],
+    ticket:  ["回数券", "b-ticket"],
+    ticketRemind: ["回数券期限", "b-ticketRemind"],
+    member:  ["会員", "b-member"],
   };
+  // 回数券を含むメール：送信時点（本文を作った時点）の回数券の状態を表示する
+  function ticketSnapHtml(m) {
+    if (m.ticketSnap && m.ticketSnap.length) {
+      return '<div class="tksnap"><b>送信時点の回数券情報</b>（' + fmt(m.renderedAt) + ' にデータベースから取得してメール本文に掲載）<br>' +
+        m.ticketSnap.map((s) => esc(s.planName) + '（' + esc(s.ticketId) + '）　残り ' + s.usesLeft + '回／' + s.usesTotal + '回　有効期限 ' +
+          esc(s.expiresLabel) + '　' + esc(s.status)).join("<br>") + "</div>";
+    }
+    if (m.tpl && m.status === "pending") {
+      return '<div class="tksnap"><span class="note">回数券の残り回数・有効期限は、送信予定時刻にデータベースの最新の値で本文を作り直して送ります（下のプレビューは現時点の内容です）。</span></div>';
+    }
+    return "";
+  }
   let filter = "all";
   let mails = [];
   const opened = new Set();
@@ -185,6 +208,8 @@
         ? '<span class="status-accepted">送信済み（デモ）</span> ' + fmt(m.sentAt || m.scheduledAt)
         : m.status === "failed"
         ? '<span class="status-failed">送信失敗</span> ' + fmt(m.scheduledAt)
+        : m.status === "skipped"
+        ? '<span class="status-skipped">送信中止</span> ' + fmt(m.scheduledAt)
         : m.status === "sending"
         ? '<span class="status-sending">送信処理中</span> ' + fmt(m.scheduledAt)
         : '<span class="status-pending">送信予定</span> ' + fmt(m.scheduledAt);
@@ -198,6 +223,8 @@
         <div class="mailbody">
           <p class="to">宛先：${esc(m.to)}</p>
           ${m.error ? '<p class="mail-error">エラー：' + esc(m.error) + "</p>" : ""}
+          ${m.skipReason ? '<p class="mail-error" style="color:#7a7a7a">送信中止の理由：' + esc(m.skipReason) + "</p>" : ""}
+          ${ticketSnapHtml(m)}
           ${m.html
             ? `<iframe class="mailframe" title="メールプレビュー" srcdoc="${escAttr(m.html)}"></iframe>
                <details class="rawtext"><summary>▸ テキスト版を表示</summary><pre>${esc(m.body)}</pre></details>`

@@ -33,6 +33,7 @@
   }
   .tabs a.active { color: #b08d4f; border-bottom-color: #b08d4f; }
   main { max-width: 980px; margin: 0 auto; padding: 16px 24px 60px; }
+  .card.focus { box-shadow: 0 0 0 2px #c5a15e, 0 1px 3px rgb(0 0 0 / 0.08); }
   .card {
     background: #fff;
     border-radius: 8px;
@@ -181,6 +182,16 @@
     list.push({ id: q.get("id"), token: q.get("token"), name: "", lang: pageLang });
     saveStore(list);
   }
+  // メールのリンク（?tab=tickets 等）で開くタブを指定できる。予約の合言葉はアドレス欄に残さない。
+  // 予約メールの「予約のキャンセルはこちら」（?id=…&token=…）は、予約情報タブのその予約へ直接移動する
+  const focusId = q.get("id") && q.get("token") ? q.get("id") : "";
+  {
+    const tabQ = q.get("tab") || (focusId ? "resv" : "");
+    if (q.get("token") || tabQ) {
+      const want = ["home", "resv", "member", "tickets"].includes(tabQ) ? "#" + tabQ : location.hash;
+      try { history.replaceState(null, "", location.pathname + (q.get("lang") ? "?lang=" + encodeURIComponent(q.get("lang")) : "") + want); } catch {}
+    }
+  }
 
   const hm = (ms) => {
     const d = new Date(ms + 9 * 3600e3);
@@ -191,28 +202,58 @@
   let rows = []; // {entry, bk}
   let myTickets = [];
   let ticketPlans = [];
+  // 会員（ログイン中のお客様）。マイページはログイン必須：予約の変更・取消、回数券の購入・残数確認は
+  // すべてログインした本人だけができる（本人確認はサーバー側 /api/member/*）
+  let member = null;
+  let memberData = null;
+  async function loadMember() {
+    member = null; memberData = null;
+    try {
+      const r = await fetch("/api/member/me", { cache: "no-store", credentials: "same-origin" });
+      if (r.ok) { memberData = await r.json(); member = memberData.member; }
+    } catch {}
+  }
   async function loadTickets() {
     myTickets = [];
     try {
-      const items = tkStore();
+      // 本人の回数券はサーバーから直接。加えて、このブラウザに記録された券（ログイン前の購入分）も表示
+      if (memberData) myTickets = memberData.tickets || [];
+      const items = tkStore().filter((it) => !myTickets.some((t) => t.id === it.id));
       if (items.length) {
         const r = await fetch("/api/tickets/mine", { method: "POST",
           headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items }), cache: "no-store" });
-        myTickets = (await r.json()).tickets || [];
+        myTickets = [...myTickets, ...((await r.json()).tickets || [])];
       }
     } catch {}
     try {
-      ticketPlans = (await (await fetch("/api/tickets/plans", { cache: "no-store" })).json()).plans || [];
+      ticketPlans = (memberData && memberData.plans) ||
+        (await (await fetch("/api/tickets/plans", { cache: "no-store" })).json()).plans || [];
     } catch {}
   }
   async function loadAll() {
-    await loadTickets();
-    const list = store();
+    await loadMember();
     rows = [];
-    for (const entry of list) {
+    if (!member) {
+      // 未ログインでも、予約メールのリンク（予約ID＋予約ごとの合言葉）で開いた予約だけは表示する
+      // （確認・取消のみ。日時変更・回数券・会員情報はログインが必要）
+      for (const entry of store()) {
+        try {
+          const r = await fetch("/api/bookings?id=" + encodeURIComponent(entry.id), {
+            headers: { Authorization: "Bearer " + entry.token }, cache: "no-store" });
+          if (r.ok) rows.push({ entry, bk: (await r.json()).booking });
+        } catch {}
+      }
+      rows.sort((a, b) => b.bk.start - a.bk.start);
+      return;
+    }
+    await loadTickets();
+    // 本人の予約（会員に紐付いた予約）＋このブラウザに記録された予約（ログイン前の分）
+    for (const bk of memberData.bookings || []) rows.push({ entry: { id: bk.id, token: bk.token, name: bk.name }, bk });
+    for (const entry of store()) {
+      if (rows.some((r) => r.entry.id === entry.id)) continue;
       try {
         const r = await fetch("/api/bookings?id=" + encodeURIComponent(entry.id), {
-          headers: { Authorization: "Bearer " + entry.token }, cache: "no-store" });
+          headers: { Authorization: "Bearer " + entry.token }, cache: "no-store", credentials: "same-origin" });
         if (!r.ok) continue;
         const j = await r.json();
         rows.push({ entry, bk: j.booking });
@@ -221,11 +262,24 @@
     rows.sort((a, b) => b.bk.start - a.bk.start);
     if (!q.get("lang") && rows[0]) pageLang = norm(localStorage.getItem("fm-lang") || rows[0].bk.language);
   }
+  const changeLabel = () => ({ ja: "日時を変更", en: "Change date/time" }[pageLang] || "日時を変更");
+  function loginGate() {
+    const ja = pageLang !== "en";
+    return '<div class="card"><h2>' + (ja ? "マイページ" : "My page") + "</h2>" +
+      '<p class="empty" style="margin:0 0 12px">' +
+      (ja ? "マイページのご利用にはログインが必要です。<br>ご予約の確認・日時変更・取消、回数券のご購入・残り回数の確認ができます。<br>はじめての方は「新規会員登録（無料）」からご登録ください。"
+          : "Please log in to use My page. You can check, reschedule or cancel bookings and buy or check tickets.<br>New here? Please create a free account.") +
+      "</p>" +
+      '<div class="btnrow"><button type="button" class="gold" style="border:0;cursor:pointer" id="mp-login">' + (ja ? "ログイン" : "Log in") + "</button>" +
+      '<button type="button" class="gold" style="border:1px solid #c5a15e;background:#fff;color:#8a6a33;cursor:pointer" id="mp-register">' + (ja ? "新規会員登録（無料）" : "Sign up (free)") + "</button></div></div>";
+  }
 
+  // メールの「予約のキャンセルはこちら」から開いた予約を一番上に並べる
+  const focusFirst = (list) => focusId ? [...list.filter((r) => r.entry.id === focusId), ...list.filter((r) => r.entry.id !== focusId)] : list;
   function bookingCard(row, withButtons) {
     const t = L[norm(row.bk.language)] || T();
     const cancelled = row.bk.status !== "confirmed";
-    return '<div class="card" data-id="' + esc(row.entry.id) + '">' +
+    return '<div class="card' + (row.entry.id === focusId ? " focus" : "") + '" data-id="' + esc(row.entry.id) + '">' +
       '<div class="rowline"><span class="badge' + (cancelled ? " gray" : "") + '">' + (cancelled ? t.cancelled : t.booked) + "</span>" +
       '<span class="when">' + t.date(row.bk.serviceDate, hm(row.bk.start)) + "</span></div>" +
       '<div class="rowline"><span class="k">' + t.menu + "</span><span>" + esc(row.bk.courseName) + "</span></div>" +
@@ -234,7 +288,11 @@
         ? '<div class="rowline"><span class="k">回数券</span><span>' + esc(row.bk.ticket_name) + "（残り " + (row.bk.ticket_left_after ?? "-") + "回）</span></div>"
         : "") +
       (withButtons && !cancelled && row.bk.start > Date.now()
-        ? '<div class="btnrow"><button type="button" class="cancel" data-cancel="' + esc(row.entry.id) + '">' + t.cancelBtn + "</button></div>"
+        ? '<div class="btnrow">' +
+          (member && /^[\w-]+$/.test(String(row.bk.courseId || ""))
+            ? '<a class="gold" href="/book/select-datetime/' + esc(row.bk.courseId) + "?reschedule=" + encodeURIComponent(row.entry.id) + '">' + changeLabel() + "</a>"
+            : "") +
+          '<button type="button" class="cancel" data-cancel="' + esc(row.entry.id) + '">' + t.cancelBtn + "</button></div>"
         : "") +
       "</div>";
   }
@@ -250,12 +308,25 @@
       document.getElementById("tab-" + id).classList.toggle("active", tab === id);
     }
     const main = document.getElementById("main");
-    const name = store().map((x) => x.name).filter(Boolean).pop() || "";
+    if (!member) {
+      if (!rows.length || tab === "member" || tab === "tickets") {
+        main.innerHTML = loginGate();
+        return;
+      }
+      // メールのリンクから開いた予約（ログイン不要で確認・取消できる）＋ログインの案内
+      main.innerHTML = focusFirst(rows).map((r) => bookingCard(r, true)).join("") + loginGate();
+      return;
+    }
+    const name = member.name || store().map((x) => x.name).filter(Boolean).pop() || "";
     if (tab === "tickets") {
       main.innerHTML = ticketsView();
       return;
     }
-    if (!rows.length && tab !== "member") {
+    if (tab === "member") {
+      main.innerHTML = memberView(name);
+      return;
+    }
+    if (!rows.length) {
       main.innerHTML = '<div class="card"><p class="empty">' + t.empty + "</p></div>";
       return;
     }
@@ -277,12 +348,33 @@
           : '<p class="empty">お得な回数券をご用意しています。</p>') +
         '<div class="btnrow"><a class="gold" href="#tickets">回数券を見る</a></div></div>';
     } else if (tab === "resv") {
-      main.innerHTML = rows.map((r) => bookingCard(r, true)).join("");
-    } else {
-      main.innerHTML =
-        '<div class="card"><h2>' + t.member + "</h2>" +
-        '<div class="rowline"><span class="k">' + t.name + "</span><span>" + esc(name) + "</span></div></div>";
+      main.innerHTML = focusFirst(rows).map((r) => bookingCard(r, true)).join("");
     }
+  }
+
+  // 会員情報タブ：登録メール・お名前・電話番号の確認と変更、パスワード変更、ログアウト
+  function memberView(name) {
+    const t = T();
+    const ja = pageLang !== "en";
+    const inp = 'style="width:100%;box-sizing:border-box;border:1px solid #cfcfcf;border-radius:6px;padding:10px 12px;font-size:15px;margin:4px 0 10px"';
+    return '<div class="card"><h2>' + t.member + "</h2>" +
+      '<div class="rowline"><span class="k">' + (ja ? "メールアドレス（ログインID）" : "Email (login ID)") + "</span><span>" + esc(member.email) + "</span></div>" +
+      '<div class="rowline"><span class="k">' + t.name + "</span><span>" + esc(name) + "</span></div>" +
+      '<div class="rowline"><span class="k">' + (ja ? "電話番号" : "Phone") + "</span><span>" + esc(member.phone || "") + "</span></div>" +
+      "</div>" +
+      '<div class="card"><h2>' + (ja ? "会員情報の変更" : "Edit member info") + "</h2>" +
+      '<form id="mp-profile">' +
+      "<label>" + t.name + '<input name="name" ' + inp + ' value="' + esc(member.name || "") + '"></label>' +
+      "<label>" + (ja ? "電話番号" : "Phone") + '<input name="phone" ' + inp + ' value="' + esc(member.phone || "") + '"></label>' +
+      '<div class="btnrow"><button type="submit" class="gold" style="border:0;cursor:pointer">' + (ja ? "保存する" : "Save") + "</button></div>" +
+      "</form></div>" +
+      '<div class="card"><h2>' + (ja ? "パスワードの変更" : "Change password") + "</h2>" +
+      '<form id="mp-pass">' +
+      "<label>" + (ja ? "現在のパスワード" : "Current password") + '<input name="pass" type="password" ' + inp + "></label>" +
+      "<label>" + (ja ? "新しいパスワード（6文字以上）" : "New password (6+ characters)") + '<input name="newPass" type="password" ' + inp + "></label>" +
+      '<div class="btnrow"><button type="submit" class="gold" style="border:0;cursor:pointer">' + (ja ? "変更する" : "Change") + "</button></div>" +
+      "</form></div>" +
+      '<div class="card"><div class="btnrow"><button type="button" class="cancel" id="mp-logout">' + (ja ? "ログアウト" : "Log out") + "</button></div></div>";
   }
 
   const jd = (iso) => String(iso || "").slice(0, 10);
@@ -304,13 +396,8 @@
       '<p class="empty" style="margin:6px 0">' + esc(pl.description || "") + "</p>" +
       '<div class="btnrow"><button type="button" class="gold" style="border:0;cursor:pointer" data-buy="' + esc(pl.id) + '">この回数券を購入</button></div>' +
       "</div>").join("");
-    // 会員（ご予約実績のある方）だけが購入できる。非会員には案内と導線を出す
-    const member = store().length > 0 || myTickets.length > 0;
-    if (!member) {
-      return '<div class="card"><h2>回数券</h2>' +
-        '<p class="empty" style="margin:0 0 10px">回数券のご利用には会員登録が必要です。<br>当店では、ご予約の完了をもって会員登録となります（登録費無料）。</p>' +
-        '<div class="btnrow"><a class="gold" href="/book">ご予約（会員登録）はこちら</a></div></div>';
-    }
+    // ログイン中の会員だけが購入できる（判定はサーバー側でも必ず行う）
+    if (!member) return loginGate();
     return '<div class="card"><h2>保有中の回数券</h2>' +
       (own || '<p class="empty">保有中の回数券はありません。</p>') + "</div>" +
       '<div class="card"><h2>回数券のご購入</h2>' +
@@ -318,22 +405,68 @@
       (plans || '<p class="empty">現在販売中の回数券はありません。</p>') + "</div>";
   }
 
+  // 会員情報・パスワードの変更（フォーム送信）
+  document.addEventListener("submit", async (e) => {
+    const f = e.target;
+    if (f.id !== "mp-profile" && f.id !== "mp-pass") return;
+    e.preventDefault();
+    const ja = pageLang !== "en";
+    const body = f.id === "mp-profile"
+      ? { name: f.name.value, phone: f.phone.value }
+      : { pass: f.pass.value, newPass: f.newPass.value };
+    if (f.id === "mp-pass" && String(body.newPass || "").trim().length < 6) {
+      window.alert(ja ? "新しいパスワードは6文字以上で入力してください。" : "New password must be at least 6 characters.");
+      return;
+    }
+    try {
+      const r = await fetch("/api/member/profile", { method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) {
+        window.alert(j.error === "invalidLogin" ? (ja ? "現在のパスワードが違います。" : "Current password is incorrect.")
+          : (ja ? "保存できませんでした。" : "Could not save."));
+        return;
+      }
+      window.alert(ja ? "保存しました。" : "Saved.");
+    } catch {
+      window.alert(ja ? "保存できませんでした。" : "Could not save.");
+      return;
+    }
+    await loadAll();
+    render();
+  });
+
   document.addEventListener("click", async (e) => {
+    if (e.target.closest("#mp-register")) {
+      if (window.CNMember) window.CNMember.open("register"); else location.href = "/login?register=1";
+      return;
+    }
+    if (e.target.closest("#mp-login")) {
+      if (window.CNMember) window.CNMember.open("login"); else location.href = "/login";
+      return;
+    }
+    if (e.target.closest("#mp-logout")) {
+      if (window.CNMember) window.CNMember.logout();
+      else { try { await fetch("/api/member/logout", { method: "POST", credentials: "same-origin" }); } catch {} location.href = "/"; }
+      return;
+    }
     const buyId = e.target.closest("[data-buy]")?.dataset.buy;
     if (buyId) {
-      const defName = store().map((x) => x.name).filter(Boolean).pop() || "";
-      const nm = window.prompt("お名前を入力してください", defName);
-      if (!nm) return;
-      const em = window.prompt("メールアドレスを入力してください（ご予約時と同じアドレス）", "");
-      if (!em) return;
+      if (!member) { if (window.CNMember) window.CNMember.open(); return; }
+      const pl = ticketPlans.find((p) => p.id === buyId);
+      if (!window.confirm((pl ? pl.name + "（" + pl.uses + "回分・" + pl.price.toLocaleString("ja-JP") + "円）" : "この回数券") +
+        "を購入します。よろしいですか？\nお支払いは店頭にて承ります。")) return;
+      // ログイン中は会員情報のメールアドレスで購入（入力不要）。お名前が未登録のときだけ確認する
+      let nm = member.name || "";
+      if (!nm) { nm = window.prompt("お名前を入力してください", "") || ""; if (!nm.trim()) return; }
       try {
-        const r = await fetch("/api/tickets/purchase", { method: "POST",
+        const r = await fetch("/api/tickets/purchase", { method: "POST", credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ planId: buyId, name: nm.trim(), email: em.trim() }) });
+          body: JSON.stringify({ planId: buyId, name: nm.trim() }) });
         const j = await r.json();
         if (!r.ok || !j.ok) {
           if (j.error === "memberOnly") {
-            window.alert("回数券のご購入には会員登録（ご予約実績）が必要です。\nご予約時と同じメールアドレスをご入力ください。");
+            window.alert("回数券のご購入にはログインが必要です。");
             return;
           }
           throw new Error(j.error || "purchase");
@@ -371,7 +504,12 @@
   });
   window.addEventListener("hashchange", render);
 
-  loadAll().then(render);
+  loadAll().then(() => {
+    render();
+    // メールのリンクで開いた予約まで画面を移動する
+    const el = focusId && document.querySelector('.card.focus');
+    if (el) try { el.scrollIntoView({ block: "center" }); } catch {}
+  });
 })();
 </script>
   <nav class="mobile-nav" aria-label="モバイルメニュー"><a href="/" class="mobile-item"><svg viewBox="0 0 256 256" aria-hidden="true" class="nav-icon"><path d="M218.83 103.77 138.83 28.29a16 16 0 0 0-21.64 0L37.17 103.77A16 16 0 0 0 32 115.55V208a16 16 0 0 0 16 16h48a16 16 0 0 0 16-16v-48h32v48a16 16 0 0 0 16 16h48a16 16 0 0 0 16-16v-92.45a16 16 0 0 0-5.17-11.78ZM208 208h-48v-48a16 16 0 0 0-16-16h-32a16 16 0 0 0-16 16v48H48v-92.45L128 40l80 75.53Z"></path></svg><small>ホーム</small></a><a href="/book" class="mobile-item"><svg viewBox="0 0 256 256" aria-hidden="true" class="nav-icon"><path d="M208 32h-24v-8a8 8 0 0 0-16 0v8H88v-8a8 8 0 0 0-16 0v8H48a16 16 0 0 0-16 16v160a16 16 0 0 0 16 16h160a16 16 0 0 0 16-16V48a16 16 0 0 0-16-16Zm0 176H48V96h160Zm0-128H48V48h24v8a8 8 0 0 0 16 0v-8h80v8a8 8 0 0 0 16 0v-8h24Z"></path></svg><small>予約</small></a><a href="/menus" class="mobile-item"><svg viewBox="0 0 256 256" aria-hidden="true" class="nav-icon"><path d="M208 116v36a80 80 0 0 1-160 0V76a20 20 0 0 1 40 0V44a20 20 0 0 1 40 0v16a20 20 0 0 1 40 0v56a20 20 0 0 1 40 0Z" opacity=".2"></path><path d="M188 88a27.75 27.75 0 0 0-12 2.71V60a28 28 0 0 0-41.36-24.6A28 28 0 0 0 80 44v6.71A28 28 0 0 0 40 76v76a88 88 0 0 0 176 0v-36a28 28 0 0 0-28-28Zm12 64a72 72 0 0 1-144 0V76a12 12 0 0 1 24 0v44a8 8 0 0 0 16 0V44a12 12 0 0 1 24 0v68a8 8 0 0 0 16 0V60a12 12 0 0 1 24 0v68.67A48.08 48.08 0 0 0 120 176a8 8 0 0 0 16 0 32 32 0 0 1 32-32 8 8 0 0 0 8-8v-20a12 12 0 0 1 24 0Z"></path></svg><small>メニュー</small></a><a href="/map" class="mobile-item"><svg viewBox="0 0 256 256" aria-hidden="true" class="nav-icon"><path d="M128 64a40 40 0 1 0 40 40 40 40 0 0 0-40-40Zm0 64a24 24 0 1 1 24-24 24 24 0 0 1-24 24Zm0-112a88.1 88.1 0 0 0-88 88c0 31.4 14.51 64.68 42 96.25a254.19 254.19 0 0 0 41.45 38.3 8 8 0 0 0 9.18 0A254.19 254.19 0 0 0 174 200.25c27.45-31.57 42-64.85 42-96.25A88.1 88.1 0 0 0 128 16Zm0 206c-16.53-13-72-60.75-72-118a72 72 0 0 1 144 0c0 57.23-55.47 105-72 118Z"></path></svg><small>マップ</small></a></nav>

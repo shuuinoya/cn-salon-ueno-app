@@ -37,6 +37,64 @@
     return res;
   };
 
+  // 狭い画面（〜960px）では左パネルが引き出し表示になる（pm-layout.css）。
+  // 暗くした背景（パネルの外側）をタップしたら、Reactの「編集欄を閉じる」×を押して閉じる
+  document.addEventListener("click", (e) => {
+    const ws = document.querySelector(".ledger-workspace");
+    if (!ws || e.target !== ws) return;
+    if (!window.matchMedia("(max-width: 960px)").matches) return;
+    const side = ws.querySelector(":scope > .ledger-side");
+    if (!side) return;
+    const close = side.querySelector('.ledger-side-search button[aria-label="編集欄を閉じる"]');
+    if (close) close.click();
+  });
+
+  // 上部ナビのドロップダウンは、開いた位置によって画面の左右からはみ出さないよう位置を補正する
+  // （ナビが折り返した狭い画面でも、メニューの中身がすべて押せる）
+  document.addEventListener("toggle", (e) => {
+    const det = e.target;
+    if (!(det instanceof HTMLDetailsElement) || !det.classList.contains("ledger-nav-menu") || !det.open) return;
+    const dd = det.querySelector(":scope > div");
+    if (!dd) return;
+    dd.style.left = ""; dd.style.right = "";
+    const r = dd.getBoundingClientRect();
+    const W = document.documentElement.clientWidth;
+    if (r.right > W - 8) {
+      const shift = r.right - (W - 8);
+      dd.style.left = (parseFloat(getComputedStyle(dd).left) || 0) - shift + "px";
+      dd.style.right = "auto";
+    }
+    const r2 = dd.getBoundingClientRect();
+    if (r2.left < 8) { dd.style.left = (parseFloat(dd.style.left || getComputedStyle(dd).left) || 0) + (8 - r2.left) + "px"; dd.style.right = "auto"; }
+  }, true);
+
+  // 日付カレンダー（ポップオーバー）が画面の左右からはみ出さないよう、開いた位置に応じて補正する
+  // （狭い画面ではツールバーが折り返し、日付ボックスの位置が幅によって変わるため）
+  function clampDatePopover() {
+    const pop = document.querySelector(".ledger-date-popover");
+    if (!pop) return;
+    const W = document.documentElement.clientWidth;
+    pop.style.left = ""; pop.style.right = "";
+    const r = pop.getBoundingClientRect();
+    const picker = pop.offsetParent || pop.parentElement;
+    const pr = picker.getBoundingClientRect();
+    let left = r.left;
+    if (r.right > W - 8) left = W - 8 - r.width;
+    if (left < 8) left = 8;
+    if (Math.abs(left - r.left) > 0.5) {
+      pop.style.left = left - pr.left + "px";
+      pop.style.right = "auto";
+    }
+  }
+  // カレンダーは開いた後に月表示の装飾で幅が変わるため、中身が変わるたびに補正し直す
+  let clampQueued = false;
+  new MutationObserver(() => {
+    if (clampQueued || !document.querySelector(".ledger-date-popover")) return;
+    clampQueued = true;
+    requestAnimationFrame(() => { clampQueued = false; clampDatePopover(); });
+  }).observe(document.documentElement, { childList: true, subtree: true });
+  window.addEventListener("resize", clampDatePopover);
+
   function ensure() {
     const app = document.querySelector(".ledger-app");
     if (!app) return;
@@ -1968,6 +2026,25 @@
           "</div>").join("") : '<p class="pm-tk-empty">プランがありません。上の欄から追加してください。</p>';
       } catch { box.textContent = "読み込みに失敗しました"; }
     }
+    // 回数券ごとのメール送信履歴：送信日時・種類・結果・送信時点の残り回数と有効期限・台帳との一致
+    function ticketMailsHtml(t) {
+      const mails = t.mails || [];
+      if (!mails.length) return '<span class="pm-tk-empty">この回数券に関するメールはまだありません。</span>';
+      const TYPE = { ticket: "回数券のお知らせ", ticketRemind: "期限リマインド", confirm: "予約完了", remind: "予約リマインド",
+        change: "予約変更", cancel: "予約取消", notify: "新規予約通知（店舗）" };
+      const ST = { sent: "送信済み", failed: "送信失敗", skipped: "送信中止", pending: "送信予定", sending: "送信処理中" };
+      const dt = (ms) => ms ? new Date(ms + 9 * 3600e3).toISOString().replace("T", " ").slice(0, 16) : "-";
+      return '<table class="pm-tk-mails"><thead><tr><th>送信日時</th><th>種類</th><th>宛先</th><th>結果</th><th>送信時点の残り</th><th>送信時点の有効期限</th><th>台帳との照合</th></tr></thead><tbody>' +
+        mails.map((m) =>
+          "<tr><td>" + dt(m.sentAt || m.renderedAt || m.scheduledAt) + "</td>" +
+          "<td>" + esc((TYPE[m.type] || m.type) + (m.kind === "store" ? "（店舗宛）" : "")) + "</td>" +
+          "<td>" + esc(m.to) + "</td>" +
+          "<td>" + esc(ST[m.status] || m.status) + (m.error ? "<br><small>" + esc(m.error) + "</small>" : "") + (m.skipReason ? "<br><small>" + esc(m.skipReason) + "</small>" : "") + "</td>" +
+          "<td>" + (m.snap ? m.snap.usesLeft + "回／" + m.snap.usesTotal + "回" : (m.status === "pending" ? "送信時に確定" : "-")) + "</td>" +
+          "<td>" + (m.snap ? esc(m.snap.expiresLabel) : "-") + "</td>" +
+          "<td>" + (m.match === true ? "一致" : m.match === false ? '<b style="color:#c0392b">不一致（台帳 残り' + m.ledger.usesLeft + "回）</b>" : "-") + "</td></tr>").join("") +
+        "</tbody></table>";
+    }
     async function loadTickets() {
       const box = wrap.querySelector(".pm-tk-list");
       try {
@@ -1980,7 +2057,7 @@
             "<td>" + esc(t.plan_name) + "</td><td>" + jd(t.purchased_at) + "</td>" +
             "<td>" + t.uses_total + "回</td><td>" + t.used + "回</td><td><b>" + t.uses_left + "回</b></td>" +
             "<td>" + jd(t.expires_at) + "</td><td>" + (t.remind_sent ? "送信済み" : "未送信") + "</td><td>" + esc(t.status) + "</td>" +
-            '<td><button type="button" class="tk-hist">履歴</button> <button type="button" class="tk-adj">調整</button></td></tr>' +
+            '<td><button type="button" class="tk-hist">履歴</button> <button type="button" class="tk-mail">メール</button> <button type="button" class="tk-adj">調整</button></td></tr>' +
             '<tr class="pm-tk-histrow" hidden><td colspan="10">' +
             t.history.map((h) =>
               esc(String(h.at).replace("T", " ").slice(0, 16)) + "　" +
@@ -1988,7 +2065,9 @@
               (h.ref ? "（予約ID " + esc(h.ref) + "）" : "") +
               "　" + (h.delta > 0 ? "+" : "") + h.delta + "回 → 残り" + h.left_after + "回" +
               (h.note ? "　※" + esc(h.note) : "")).join("<br>") +
-            "</td></tr>").join("") +
+            "</td></tr>" +
+            // この回数券について送ったメールと、送信時点の残り回数・有効期限（台帳と照合）
+            '<tr class="pm-tk-mailrow" hidden><td colspan="10">' + ticketMailsHtml(t) + "</td></tr>").join("") +
           "</tbody></table>";
       } catch { box.textContent = "読み込みに失敗しました"; }
     }
@@ -2038,6 +2117,11 @@
       if (tkRow && e.target.classList.contains("tk-hist")) {
         const hist = tkRow.nextElementSibling;
         if (hist) hist.hidden = !hist.hidden;
+        return;
+      }
+      if (tkRow && e.target.classList.contains("tk-mail")) {
+        const mailRow = tkRow.nextElementSibling?.nextElementSibling;
+        if (mailRow && mailRow.classList.contains("pm-tk-mailrow")) mailRow.hidden = !mailRow.hidden;
         return;
       }
       if (tkRow && e.target.classList.contains("tk-adj")) {

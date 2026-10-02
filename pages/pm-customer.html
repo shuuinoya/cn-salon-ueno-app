@@ -88,6 +88,22 @@
   }
   .actions button:hover { background: #d45953; }
   .note { color: #8d8d8d; font-size: 12px; margin-top: 8px; text-align: right; }
+  /* 生年月日の3つの選択欄は、幅が足りなければ折り返す */
+  .birth { flex-wrap: wrap; row-gap: 6px; }
+  /* スマホ幅：項目名を入力欄の上に置く縦積みレイアウトに切り替える（文字は縮めない） */
+  @media (max-width: 600px) {
+    .wrap { padding: 10px 10px 40px; }
+    table, tbody, tr, th, td { display: block; width: 100%; }
+    tr { border-bottom: 1px solid #e6cfa8; }
+    th, td { border: 0; }
+    th { width: 100%; background: #fbf4e6; padding: 8px 10px 6px; }
+    td { padding: 6px 10px 10px; }
+    table { border: 1px solid #e6cfa8; border-bottom: 0; }
+    input[type="text"], input[type="tel"], input[type="email"], select, textarea { min-height: 40px; font-size: 16px; }
+    .radios { flex-wrap: wrap; gap: 10px 22px; }
+    .radios label { min-height: 36px; }
+    .actions button { min-height: 44px; width: 100%; }
+  }
 </style>
 </head>
 <body>

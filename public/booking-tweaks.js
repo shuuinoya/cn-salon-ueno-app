@@ -69,11 +69,18 @@
     // （残数の判定・減算はすべてサーバー側。ここは選択内容を渡すだけ）
     try {
       const u0 = typeof input === "string" ? input : input?.url || "";
-      if (u0.includes("/api/bookings") && !u0.includes("cancel") && init?.method === "POST" && window.__fmTicketSel) {
+      if (u0.includes("/api/bookings") && !u0.includes("cancel") && init?.method === "POST") {
         const b0 = JSON.parse(init.body || "{}");
-        b0.ticketId = window.__fmTicketSel.id;
-        b0.ticketToken = window.__fmTicketSel.token;
-        init = { ...init, body: JSON.stringify(b0) };
+        let changed = false;
+        if (window.__fmTicketSel) {
+          b0.ticketId = window.__fmTicketSel.id;
+          b0.ticketToken = window.__fmTicketSel.token;
+          changed = true;
+        }
+        // 日時変更中（マイページの「日時を変更」から来た場合）：元の予約IDを添える
+        const rs = rescheduleId();
+        if (rs) { b0.rescheduleId = rs; changed = true; }
+        if (changed) init = { ...init, body: JSON.stringify(b0) };
       }
     } catch {}
     const res = await origFetch(input, init);
@@ -83,12 +90,20 @@
         const j2 = await res.clone().json().catch(() => ({}));
         const msg = { ticketEmpty: "回数券の残り回数が0のため、ご予約いただけません。",
           ticketExpired: "回数券の有効期限が切れているため、ご予約いただけません。",
-          ticketInvalid: "回数券の情報を確認できませんでした（ご予約時のメールアドレスが購入時と一致している必要があります）。" }[j2.error];
-        if (msg) window.alert(msg);
+          ticketInvalid: "回数券の情報を確認できませんでした（ご予約時のメールアドレスが購入時と一致している必要があります）。",
+          loginRequired: "ご予約の日時変更にはログインが必要です。右上の「ログイン」からログインしてください。",
+          alreadyCancelled: "変更元のご予約はすでに取り消されています。新しくご予約ください。",
+          tooLate: "開始時刻を過ぎたご予約は変更できません。店舗までお電話ください。" }[j2.error];
+        if (j2.error === "notFound" && rescheduleId()) { clearReschedule(); window.alert("変更元のご予約が見つかりませんでした。新しくご予約ください。"); }
+        else if (msg) window.alert(msg);
       }
       if (u.includes("/api/bookings") && !u.includes("cancel") && init?.method === "POST" && res.ok) {
         const j = await res.clone().json();
         const body = JSON.parse(init.body || "{}");
+        if (j.rescheduledFrom) {
+          clearReschedule();
+          try { sessionStorage.setItem("fm-rescheduled", "1"); } catch {}
+        }
         if (j.id && j.token) {
           const list = store().filter((x) => x.id !== j.id);
           list.push({ id: j.id, token: j.token, name: body.name || "", lang: body.language || "ja" });
@@ -106,27 +121,42 @@
 
   // ---- 回数券（会員向け）：保有券の取得・メニュー最上部の案内・予約時の選択 ----
   const tkItems = () => { try { return JSON.parse(localStorage.getItem("cn-tickets") || "[]"); } catch { return []; } };
-  const isMember = () => store().length > 0 || tkItems().length > 0; // 会員＝マイページ登録済み（表示の出し分けのみ。判定処理はすべてサーバー側）
+  // 会員＝ログイン中（member.js）またはこのブラウザに予約・回数券が記録済み
+  // （表示の出し分けのみ。判定処理はすべてサーバー側）
+  const isMember = () => !!(window.CNMember && window.CNMember.me) || store().length > 0 || tkItems().length > 0;
   let myTickets = null;
-  async function loadMyTickets() {
-    if (myTickets !== null) return myTickets;
-    myTickets = [];
-    const items = tkItems();
-    if (items.length) {
+  let myTicketsLoading = null;
+  function loadMyTickets() {
+    if (myTickets !== null) return Promise.resolve(myTickets);
+    if (myTicketsLoading) return myTicketsLoading;
+    myTicketsLoading = (async () => {
+      const list = [];
+      // ログイン中の会員：本人の回数券（トークン付き）はサーバーから直接もらう
       try {
-        const r = await origFetch("/api/tickets/mine", { method: "POST",
-          headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items }), cache: "no-store" });
-        myTickets = (await r.json()).tickets || [];
+        if (window.CNMember) await window.CNMember.ready;
+        for (const t of (window.CNMember?.data?.tickets || [])) list.push(t);
       } catch {}
-    }
-    return myTickets;
+      // このブラウザに記録された券（未ログインでも使える）
+      const items = tkItems().filter((it) => !list.some((t) => t.id === it.id));
+      if (items.length) {
+        try {
+          const r = await origFetch("/api/tickets/mine", { method: "POST",
+            headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items }), cache: "no-store" });
+          for (const t of ((await r.json()).tickets || [])) list.push(t);
+        } catch {}
+      }
+      myTickets = list;
+      return myTickets;
+    })();
+    return myTicketsLoading;
   }
   const usableTickets = () => (myTickets || []).filter((t) => t.status === "有効" && t.uses_left > 0);
 
   // メニュー選択ページ：会員にはメニュー一覧の一番上に回数券の案内を出す（非会員には出さない）
   // 見た目は他のメニューセクションとまったく同じ（list-card＋menu-row構造をそのまま使う）
   async function decorateTicketBanner() {
-    if (location.pathname !== "/book") return;
+    // 【予約】と【メニュー】のトップに、会員にはいつでも回数券（残り回数・購入）を出す
+    if (location.pathname !== "/book" && location.pathname !== "/menus") return;
     if (!isMember()) return;
     const firstCard = document.querySelector(".list-card");
     if (!firstCard || document.getElementById("fm-tkbanner")) return;
@@ -197,7 +227,7 @@
       }
       const t = use[Number(v)];
       const item = tkItems().find((x) => x.id === t.id);
-      window.__fmTicketSel = { id: t.id, token: item?.token || "", name: t.plan_name };
+      window.__fmTicketSel = { id: t.id, token: item?.token || t.token || "", name: t.plan_name };
       note.textContent = "この予約で1回分を使用します（ご予約後の残り " + (t.uses_left - 1) + "回）。コース料金は回数券でのお支払いになります。";
     });
   }
@@ -546,6 +576,47 @@
     dl.appendChild(dd);
   }
 
-  setInterval(() => { apply(); decorateConsent(); decorateComplete(); decorateTicketBanner(); decorateTicketPick(); decorateTicketComplete(); }, 700);
+  // ---- 予約の日時変更（ログイン会員のみ）：マイページ「日時を変更」→ ?reschedule=予約ID で予約フローへ ----
+  // 新しい日時で予約を確定すると、サーバーが元の予約を自動的に取り消す（本人確認はサーバー側）
+  const RSKEY = "fm-reschedule";
+  function rescheduleId() { try { return sessionStorage.getItem(RSKEY) || ""; } catch { return ""; } }
+  function clearReschedule() { try { sessionStorage.removeItem(RSKEY); } catch {} }
+  try {
+    const rs = new URLSearchParams(location.search).get("reschedule");
+    if (rs) sessionStorage.setItem(RSKEY, rs);
+  } catch {}
+  function decorateReschedule() {
+    const rs = rescheduleId();
+    const old = document.getElementById("fm-reschedule-bar");
+    if (!rs || !location.pathname.startsWith("/book") || location.pathname.includes("/book/complete")) {
+      if (old) old.remove();
+      return;
+    }
+    if (old) return;
+    const main = document.querySelector("main");
+    if (!main) return;
+    const bar = document.createElement("div");
+    bar.id = "fm-reschedule-bar";
+    bar.style.cssText = "background:#fff6e5;border:1px solid #e3c98f;border-radius:8px;padding:12px 16px;margin:0 0 14px;font-size:14px;line-height:1.7;color:#5a4a2a;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between";
+    bar.innerHTML = "<span><b>ご予約の日時変更中です。</b>新しい日時・メニューで予約を確定すると、元のご予約は自動的に取り消されます。</span>" +
+      '<button type="button" id="fm-reschedule-stop" style="border:1px solid #c5a15e;background:#fff;color:#8a6a33;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer">変更をやめる</button>';
+    main.prepend(bar);
+    bar.querySelector("#fm-reschedule-stop").addEventListener("click", () => { clearReschedule(); location.href = "/mypage#resv"; });
+  }
+  function decorateRescheduleComplete() {
+    if (!location.pathname.includes("/book/complete")) return;
+    let done = "";
+    try { done = sessionStorage.getItem("fm-rescheduled") || ""; } catch {}
+    if (!done) return;
+    const dl = document.querySelector(".booking-receipt dl");
+    if (!dl || dl.dataset.fmRescheduled) return;
+    dl.dataset.fmRescheduled = "1";
+    const p = document.createElement("p");
+    p.style.cssText = "background:#fff6e5;border-radius:8px;padding:10px 14px;font-size:14px;color:#5a4a2a;margin:0 0 12px";
+    p.textContent = "ご予約の日時を変更しました。元のご予約は取り消されています（マイページでご確認いただけます）。";
+    dl.before(p);
+  }
+
+  setInterval(() => { apply(); decorateConsent(); decorateComplete(); decorateTicketBanner(); decorateTicketPick(); decorateTicketComplete(); decorateReschedule(); decorateRescheduleComplete(); }, 700);
   setInterval(() => { load(); }, 15000);
 })();

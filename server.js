@@ -42,6 +42,7 @@ function fileVer(name) {
   try { return String(Math.floor(fs.statSync(path.join(__dirname, "public", name)).mtimeMs)); } catch { return "1"; }
 }
 const TWEAKS_VER = fileVer("booking-tweaks.js");
+const MEMBER_VER = fileVer("member.js");
 const PM_VER = fileVer("pm-layout.js") + "-" + fileVer("pm-layout.css");
 
 const ENTRY_URLS = {
@@ -100,9 +101,15 @@ function sendFile(res, file, status, type, head, url, req) {
           /nav:\{"pathname":"[^"]*","searchParams":\[(?:\[[^\]]*\],?)*\]\}/,
           "nav:" + nav
         );
-        // 予約ページには、管理画面のフリーメッセージ設定を反映するスクリプトを差し込む
-        if (url.pathname.startsWith("/book")) {
-          // ?v=更新時刻 を付けて、ブラウザに古いキャッシュを使わせない
+        // 予約サイトの全ページに、会員ログイン（右上ボタン→ログインモーダル）のスクリプトを差し込む
+        // （管理画面には入れない。?v=更新時刻 を付けて、ブラウザに古いキャッシュを使わせない）
+        if (brandFor(file, url) === BOOKING_BRAND && !file.includes("pm-login") && !file.includes("admin")) {
+          text = text.replace("</body>", '<script src="/member.js?v=' + MEMBER_VER + '" defer></script></body>');
+          // 予約サイトのレイアウト補正（タブレット幅で本文の列を中央に置く）
+          text = text.replace("</head>", '<link rel="stylesheet" href="/booking-layout.css?v=' + fileVer("booking-layout.css") + '"/></head>');
+        }
+        // 予約・メニューページには、フリーメッセージ設定の反映と会員向け回数券表示のスクリプトを差し込む
+        if (url.pathname.startsWith("/book") || url.pathname.startsWith("/menus")) {
           text = text.replace("</body>", '<script src="/booking-tweaks.js?v=' + TWEAKS_VER + '" defer></script></body>');
         }
         // ファビコン：予約サイト＝店のマーク（丸いロゴ）／管理画面＝4枚花びらのクローバーで統一
@@ -303,7 +310,7 @@ const handler = (req, res) => {
     const isStatic = (req.method === "GET" || head) &&
       /\.(js|css|svg|png|jpe?g|webp|gif|ico|woff2?|ttf|otf|map|txt|webmanifest)$/i.test(p);
     const isWriteTarget = req.method === "POST" && (p === "/api/bookings" || p === "/api/bookings/cancel" ||
-      p.startsWith("/api/tickets/") || p === "/api/demo/login");
+      p.startsWith("/api/tickets/") || p.startsWith("/api/member/") || p === "/api/demo/login");
     const over = isStatic
       ? rateLimited("s:" + srcIp, 2000, 30000)
       : rateLimited("g:" + srcIp, 300, 30000) || (isWriteTarget && rateLimited("w:" + srcIp, 40, 300000));

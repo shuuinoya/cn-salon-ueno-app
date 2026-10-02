@@ -1,0 +1,8 @@
+/* 予約サイト（お客様側）のレイアウト補正。保存CSS（index.*.css）の後に読み込む。
+   右の列（.side-column）があるのはトップと日時選択だけ。それ以外のページは本文の列（最大768px）が
+   左に寄って右側が空くため、右の列がないページに限り、768px以上では本文を中央に置く
+   （マイページと同じ並び。幅を変えても途中で位置が跳ばない）。幅・文字サイズ・余白は変えない。 */
+@media (min-width: 768px) {
+  .content:not(:has(> .side-column)) { justify-content: center; }
+  .content:not(:has(> .side-column)) > .main-column { padding-right: 0; }
+}

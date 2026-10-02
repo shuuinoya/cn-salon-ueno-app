@@ -10,6 +10,8 @@
   "allowTo": [
     "kudaka.1228@gmail.com"
   ],
+  "_公開URL": "メール内リンクの起点URL。本番（Render等）では公開ドメインが自動で使われるので不要。ローカルから実送信する場合だけ、本番の公開URLを入れてください（未設定だと 127.0.0.1 等のリンク入りメールは送信を止めます）",
+  "publicOrigin": "https://cn-salon-ueno.onrender.com",
   "_ホットペッパー連携": "hotpepper.enabled を true にすると、同じGmailの受信箱を毎分チェックし、件名に subjectFilter を含む未読の予約通知メールを解析して台帳に自動反映します（IMAPを有効にしたGmail＋アプリパスワードで動作）",
   "hotpepper": {
     "enabled": true,

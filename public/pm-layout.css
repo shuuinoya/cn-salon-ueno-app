@@ -1633,3 +1633,204 @@ main.ledger-app .ledger-side { animation: pm-side-in 0.18s ease-out; }
 #pm-account-modal select { font: inherit; padding: 6px 8px; border: 1px solid #cfc6b8; border-radius: 4px; background: #fff; }
 #pm-account-modal .pm-ac-lograw { max-height: 180px; overflow: auto; font-size: 12px; line-height: 1.9; color: #6b5b4b; background: #faf6f0; border: 1px solid #eee3d5; border-radius: 6px; padding: 8px 10px; }
 #pm-account-modal .pm-menu-new input[type="password"] { flex: 1; }
+
+/* ============================================================
+   レスポンシブ：画面幅に応じてレイアウト「構造」を切り替える
+   （縮小・文字小さく・overflow:hiddenで隠す、はしない。
+     横スクロールはタイムライン内部（.ledger-grid-scroll）だけに限定し、
+     ページ全体は横にスクロールしない）
+   ・〜960px：左パネル（予約情報・検索）は保存CSSどおり画面左の引き出し表示。
+     幅を画面内に収め、背景を暗くして外側タップで閉じられるようにする
+   ・〜760px：左レールを横並びバーに、主要ボタンを指で押せる大きさに
+   ・〜600px：左パネルは全画面シート。ナビは固定せず縦スペースを確保
+   予約枠の位置・時間計算（left/width の%）には一切触れない。
+   ============================================================ */
+
+/* 1) ページ全体の横はみ出し防止（横スクロールはタイムライン内部だけ） */
+main.ledger-app { overflow-x: clip; }
+main.ledger-app .ledger-workspace,
+main.ledger-app .ledger-main { min-width: 0; }
+main.ledger-app .ledger-grid-scroll {
+  max-width: 100%;
+  overflow: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+/* 時間軸（10時〜翌2時）は保存JSが min-width:1146px を与えており、1時間＝60px の視認性を維持。
+   足りない分はこの枠の中だけで左右スクロールし、スタッフ名列は sticky で常に見える */
+main.ledger-app .ledger-grid-head .ledger-staff-cell,
+main.ledger-app .ledger-row > .ledger-staff-cell { position: sticky; left: 0; }
+
+/* 2) PC：左パネルは画面幅に応じて 285〜480px で可変（タイムラインの幅を奪いすぎない） */
+@media (min-width: 961px) {
+  main.ledger-app .ledger-side,
+  main.ledger-app .ledger-side.pm-side {
+    flex: 0 0 clamp(285px, 26vw, 480px);
+    width: clamp(285px, 26vw, 480px);
+    min-width: 0;
+  }
+}
+
+/* ナビのドロップダウン：右寄りの項目は右端に揃え、画面右からはみ出さない */
+/* （位置のはみ出し補正は pm-layout.js の toggle 処理で行う） */
+.ledger-nav-menu > div { max-width: calc(100vw - 16px); }
+.ledger-nav-menu > div button, .ledger-nav-menu > div a { white-space: normal; }
+
+/* 3) 〜960px：左パネルは引き出し（保存CSSで position:fixed）。幅・余白・背景を整える */
+@media (max-width: 960px) {
+  main.ledger-app .ledger-side,
+  main.ledger-app .ledger-side.pm-side {
+    width: min(480px, calc(100vw - 48px));
+    max-width: calc(100vw - 48px);
+    max-height: 100vh;
+    max-height: 100dvh;
+    margin: 0;
+    border-radius: 0;
+    overscroll-behavior: contain;
+  }
+  /* 背景を暗くする（外側タップで閉じる処理は pm-layout.js） */
+  main.ledger-app .ledger-workspace:has(> .ledger-side)::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 59;
+    background: rgb(0 0 0 / 0.35);
+  }
+  /* 日付移動の各ボタンが折り返しても重ならないように */
+  main.ledger-app .ledger-toolbar { row-gap: 8px; }
+  main.ledger-app .ledger-store-name { display: none; }
+}
+
+/* 4) 〜760px：タブレット縦・スマホ横 */
+@media (max-width: 760px) {
+  /* 左レール（予約・開く・返客・会計・顧客・カード）を横並びのバーに */
+  main.ledger-app .ledger-workspace { flex-direction: column; min-height: 0; }
+  main.ledger-app .ledger-rail {
+    flex: none;
+    width: auto;
+    display: flex;
+    flex-direction: row;
+    border-right: 0;
+    border-bottom: 1px solid #ccbfae;
+    overflow-x: auto;
+  }
+  main.ledger-app .ledger-rail button {
+    flex: 1 0 60px;
+    width: auto;
+    height: 48px;
+    border-bottom: 0;
+    border-right: 1px solid #ddd;
+    padding: 3px 6px;
+  }
+  main.ledger-app .ledger-rail button:last-child { border-right: 0; }
+  main.ledger-app .ledger-rail b { font-size: 20px; line-height: 22px; }
+  /* 時間ジャンプ（10〜2時）：ボタンの最低幅を確保し、足りなければこの行だけ横スクロール */
+  main.ledger-app .ledger-overview { height: auto; overflow-x: auto; overscroll-behavior-x: contain; }
+  main.ledger-app .ledger-overview > button { flex: 0 0 48px; min-width: 48px; }
+  /* 日付操作・更新・シフト追加・集計ボタン：指で押せる高さと間隔 */
+  main.ledger-app .ledger-toolbar { gap: 8px; padding: 8px 10px; }
+  main.ledger-app .ledger-toolbar > button,
+  main.ledger-app .ledger-toolbar > select,
+  main.ledger-app .ledger-toolbar .ledger-date-trigger { height: 40px; min-height: 40px; }
+  main.ledger-app .ledger-toolbar > .ledger-day-arrow,
+  main.ledger-app .ledger-toolbar > .ledger-refresh { width: 44px; }
+  main.ledger-app .ledger-toolbar > .ledger-today { min-width: 72px; }
+  main.ledger-app .ledger-modes { gap: 8px; }
+  main.ledger-app .ledger-mode-group > button,
+  main.ledger-app .ledger-modes .ledger-add { min-height: 40px; height: auto; }
+  main.ledger-app .ledger-underbar { gap: 8px; }
+  main.ledger-app .ledger-underbar > button,
+  main.ledger-app .ledger-category-row > button { min-height: 40px; height: auto; }
+  /* 左パネル内の操作ボタン（検索・新規・保存・削除・移動 等）も押しやすく */
+  main.ledger-app .ledger-side .ledger-form-actions button,
+  main.ledger-app .ledger-side .ledger-side-search button,
+  main.ledger-app .ledger-side .ledger-side-search input,
+  main.ledger-app .ledger-side .ledger-kind-buttons button,
+  main.ledger-app .ledger-side .ledger-duration button { min-height: 40px; }
+  main.ledger-app .ledger-side .ledger-form-actions { gap: 8px; }
+  /* 固定表示のお知らせ（デモ注記・トースト・保存結果）は画面下に横いっぱいで重ねず並べる */
+  main.ledger-app .ledger-demo { left: 8px; right: 8px; bottom: 8px; max-width: none; }
+  #pm-toast { left: 8px; right: 8px; bottom: 64px; }
+  main.ledger-app .ledger-feedback { left: 8px; right: 8px; bottom: 64px; max-width: none; }
+  /* 予約枠ホバーの詳細ツールチップは画面幅に収める */
+  #pm-evtip { min-width: 0; max-width: calc(100vw - 24px); }
+}
+
+/* 5) 〜600px：スマホ縦 */
+@media (max-width: 600px) {
+  /* ナビは固定せず（2〜3段に折り返すため）、本文の縦スペースを確保 */
+  main.ledger-app .ledger-nav { position: static; }
+  main.ledger-app .ledger-nav nav > button,
+  main.ledger-app .ledger-nav nav > a,
+  main.ledger-app .ledger-nav-menu > summary { min-height: 40px; padding: 8px 10px; }
+  main.ledger-app .ledger-nav nav > .ledger-help-button { margin: 4px 0; }
+  /* 左パネル（予約情報・検索・新規登録）は全画面シート */
+  main.ledger-app .ledger-side,
+  main.ledger-app .ledger-side.pm-side {
+    width: 100vw;
+    max-width: 100vw;
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+  }
+  main.ledger-app .ledger-workspace:has(> .ledger-side)::before { display: none; }
+  /* 日付ボックスは行いっぱいに。更新・天気は同じ行で折り返す */
+  main.ledger-app .ledger-toolbar .ledger-date-picker { flex: 1 1 200px; min-width: 0; }
+  main.ledger-app .ledger-toolbar .ledger-date-trigger { min-width: 0; width: 100%; }
+  main.ledger-app .ledger-toolbar > select { flex: 1 1 160px; width: auto; margin-left: 0; }
+  main.ledger-app .ledger-main { padding: 8px 8px 16px; }
+  /* 集計：1項目ずつ読めるよう間隔を詰めて折り返す */
+  main.ledger-app .ledger-summary { gap: 2px 12px; padding: 8px 10px; }
+  /* お会計モーダル等：縦に長い内容は画面内でスクロール */
+  #pm-checkout section, #pm-ticket-modal section, #pm-account-modal section, #pm-menu-modal section { max-height: calc(100vh - 16px); }
+}
+
+/* 右下の固定表示（デモ注記：下から60px）とトーストが重ならないよう、トーストはその上に置く */
+#pm-toast { bottom: 128px; max-width: min(360px, calc(100vw - 24px)); }
+@media (max-width: 760px) {
+  #pm-toast { bottom: 76px; max-width: none; }
+}
+/* 狭い画面：画面下に固定表示のお知らせがあるため、本文の最後まで読めるよう下に余白を確保 */
+@media (max-width: 760px) {
+  main.ledger-app .ledger-main { padding-bottom: 96px; }
+}
+@media (max-width: 760px) {
+  /* 左パネル内の操作ボタン（完了・精算・削除・検索・新規・編集・移動する 等）は指で押せる高さに */
+  main.ledger-app .ledger-side button { min-height: 40px; }
+  /* 画面下の固定表示（トースト・お知らせ）に最後のボタンが隠れても、スクロールで必ず出せる余白 */
+  main.ledger-app .ledger-side { padding-bottom: 170px; }
+}
+
+/* 月間シフト作成：上の操作ボタン2段（目標保存〜一括作成／シフト作成〜シフト変更・削除）は
+   幅が足りなければ折り返す（横一列のままだと狭い画面で左右にはみ出す） */
+#pm-month-left, #pm-month-tools, #pm-bulk-group, #pm-month-bottom { flex-wrap: wrap; max-width: 100%; min-width: 0; row-gap: 8px; }
+#pm-bulk-staff { min-width: 0; max-width: 100%; }
+@media (max-width: 760px) {
+  #pm-month-title { margin: -10px -10px 14px; }
+  #pm-month-tools { margin-left: 0; }
+}
+
+/* タッチ操作の端末（iPad等）：画面幅に関係なく、主要ボタンを指で押しやすい高さ（40px以上）にする。
+   マウス操作のPCには適用しない（PCの見た目は変えない） */
+@media (pointer: coarse) {
+  main.ledger-app .ledger-toolbar > button,
+  main.ledger-app .ledger-toolbar > select,
+  main.ledger-app .ledger-toolbar .ledger-date-trigger { height: 40px; min-height: 40px; }
+  main.ledger-app .ledger-toolbar > .ledger-day-arrow,
+  main.ledger-app .ledger-toolbar > .ledger-refresh { width: 44px; }
+  main.ledger-app .ledger-mode-group > button,
+  main.ledger-app .ledger-modes .ledger-add,
+  main.ledger-app .ledger-underbar > button,
+  main.ledger-app .ledger-category-row > button,
+  main.ledger-app .ledger-side button { min-height: 40px; height: auto; }
+  main.ledger-app .ledger-nav nav > button,
+  main.ledger-app .ledger-nav nav > a,
+  main.ledger-app .ledger-nav-menu > summary { min-height: 40px; }
+  .ledger-nav-menu > div button, .ledger-nav-menu > div a { min-height: 40px; }
+}
+
+/* 回数券管理：券ごとのメール送信履歴（送信時点の残り回数・有効期限と台帳の照合） */
+#pm-ticket-modal .pm-tk-mails { width: 100%; border-collapse: collapse; font-size: 12px; background: #fff; }
+#pm-ticket-modal .pm-tk-mails th, #pm-ticket-modal .pm-tk-mails td { border: 1px solid #eee3d5; padding: 5px 7px; text-align: left; vertical-align: top; }
+#pm-ticket-modal .pm-tk-mails th { background: #faf6f0; color: #6b4f2a; font-weight: 600; }
+#pm-ticket-modal .pm-tk-mailrow > td { background: #fdfaf6; overflow-x: auto; }

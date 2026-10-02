@@ -35,6 +35,17 @@
   .res-ng { color: #d13438; font-weight: 700; }
   .res-cx { color: #8a6a33; font-weight: 700; }
   .empty { color: #999; padding: 14px 4px; }
+  /* 一覧表は列が多いため、ページ全体ではなく表の枠の中だけを横スクロールにする */
+  #hp-log, #sb-list { overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; max-width: 100%; }
+  /* 入力フォーム：幅が狭いときは6列→2列に組み替える（文字は縮めない） */
+  @media (max-width: 760px) {
+    form.hp { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    form.hp .wide { grid-column: 1 / -1; }
+    form.hp button { grid-column: 1 / -1; min-height: 44px; }
+    form.hp input, form.hp select { min-height: 40px; font-size: 16px; }
+    main { padding: 0 10px; }
+    .card { padding: 14px 12px; }
+  }
 </style>
 </head>
 <body>
