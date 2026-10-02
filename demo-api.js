@@ -77,6 +77,25 @@ function memberOf(req) {
   if (Date.now() - s.created > MEMBER_SESSION_MAX_AGE) { state.memberSessions.delete(token); return null; }
   return state.members.get(s.email) || null;
 }
+// ---- パスワード再設定用URL（合言葉はハッシュで保存・60分で失効・1回限り） ----
+const RESET_TTL = 60 * 60000;
+const sha256 = (t) => crypto.createHash("sha256").update(String(t)).digest("hex");
+function pruneResets() {
+  for (const [k, r] of state.memberResets) if (r.used || r.exp < Date.now() - 24 * 3600e3) state.memberResets.delete(k);
+}
+function resetLookup(token) {
+  const t = String(token || "");
+  if (!/^[a-f0-9]{64}$/.test(t)) return { ok: false, error: "resetInvalid" };
+  const rec = state.memberResets.get(sha256(t));
+  if (!rec || rec.used || !state.members.has(rec.email)) return { ok: false, error: "resetInvalid" };
+  if (Date.now() > rec.exp) return { ok: false, error: "resetExpired" };
+  return { ok: true, rec };
+}
+// 画面に出す確認用のメール表示（例：ka****@gmail.com）
+function maskEmail(e) {
+  const [u, d] = String(e).split("@");
+  return (u.length <= 2 ? u[0] + "*" : u.slice(0, 2) + "*".repeat(Math.min(6, u.length - 2))) + "@" + d;
+}
 function memberPublic(m) {
   return { email: m.email, name: m.name || "", phone: m.phone || "", createdAt: m.createdAt };
 }
@@ -145,16 +164,36 @@ sseKeepAlive.unref?.();
 // プロジェクト直下に mail-config.json（mail-config.example.json 参照）を置くと、
 // allowTo に書いた宛先にだけ、SMTP（例：Gmailのアプリパスワード）で実際に送信する。
 // それ以外の宛先は従来どおりデモ内シミュレーションのみ（外部に出ない）。
+// 本番（Render 等）では、ファイルの代わりに環境変数で設定できる（ファイルはgitに含めないため）：
+//   MAIL_USER（送信元Gmail）・MAIL_PASS（Gmailのアプリパスワード16桁）・MAIL_FROM（省略時はMAIL_USER）
+//   MAIL_HOST（既定 smtp.gmail.com）・MAIL_PORT（既定 465）
+//   MAIL_SEND_TO_ALL=1 … お客様を含むすべての宛先へ実際に送る（未設定なら MAIL_ALLOW_TO の宛先だけ）
+//   MAIL_ALLOW_TO=a@x.com,b@y.com … 実送信してよい宛先（テスト用）
 function loadMailConfig() {
   try {
     const c = JSON.parse(fs.readFileSync(path.join(__dirname, "mail-config.json"), "utf8"));
     if (c && c.enabled && c.host && c.user && Array.isArray(c.allowTo)) return c;
   } catch {}
+  const e = process.env;
+  if (e.MAIL_USER && e.MAIL_PASS) {
+    return {
+      enabled: true,
+      host: e.MAIL_HOST || "smtp.gmail.com",
+      port: Number(e.MAIL_PORT) || 465,
+      user: e.MAIL_USER, pass: e.MAIL_PASS, from: e.MAIL_FROM || e.MAIL_USER,
+      allowTo: String(e.MAIL_ALLOW_TO || "").split(",").map((s) => s.trim()).filter(Boolean),
+      allowAll: e.MAIL_SEND_TO_ALL === "1",
+      secure: e.MAIL_SECURE || undefined, // "none"＝暗号化なし（社内・検証用のSMTPのみ）
+    };
+  }
   return null;
 }
+// 予約済みのテスト用ドメイン（example.com 等）は、設定に関係なく実際には送らない
+const RESERVED_MAIL_DOMAIN = /@(?:[^@\s]+\.)?(?:example\.(?:com|net|org|jp)|invalid|test|localhost|local)$/i;
 const realSendAllowed = (to) => {
   const c = loadMailConfig();
-  return c && c.allowTo.includes(to) ? c : null;
+  if (!c || RESERVED_MAIL_DOMAIN.test(String(to || ""))) return null;
+  return (c.allowAll || c.allowTo.includes(to)) ? c : null;
 };
 
 // 最小限のSMTPクライアント（依存パッケージなし）。
@@ -447,6 +486,8 @@ const state = {
   members: new Map(),        // email -> {email, pass, name, phone, createdAt, bookings:[id], tickets:[id]}
   memberSessions: new Map(), // token -> {email, created}（ログイン状態。保存されるので再起動後も有効）
   memberFails: new Map(),    // email -> {n, until}（連続失敗によるロック）
+  // パスワード再設定用URLの合言葉（保存するのはハッシュだけ。60分で失効・1回使ったら無効）
+  memberResets: new Map(),   // sha256(token) -> {email, created, exp, used}
 };
 
 // ---- 永続化（persist.js＝このシステムのデータベース層） ----
@@ -908,7 +949,8 @@ function postSchedule(body) {
 // ---- リマインド・通知メール（デモ：実送信はせず、内容を生成して保存する） ----
 
 const STORE_NAME = "CN Ueno health & beauty";
-const STORE_MAIL = "info@cn-salon-ueno.example.jp";
+// 店舗宛て通知（新規予約・取消・当日リマインド）の宛先。本番は環境変数 STORE_MAIL で実在のアドレスにする
+const STORE_MAIL = process.env.STORE_MAIL || "info@cn-salon-ueno.example.jp";
 
 function fmtDateJa(date) {
   const w = ["日", "月", "火", "水", "木", "金", "土"][new Date(date + "T00:00:00Z").getUTCDay()];
@@ -947,6 +989,22 @@ function mailHtml(body) {
     lines.join("<br/>") +
     "</td></tr></table></td></tr></table></body></html>";
 }
+
+// メールに載せる秘密の値（会員登録時のパスワード・パスワード再設定用URL）は、メール記録
+// （state.mails＝管理画面のメール管理・保存データ）には伏せ字で残し、お客様に届くメールにだけ
+// 実際の値を入れる。値はメモリ上にだけ置き、送信処理が終わったら消す（保存データには一切書かない）
+const mailSecrets = new Map(); // mailId -> [[記録上の伏せ字, 実際の値], ...]
+function withMailSecrets(m) {
+  const sec = mailSecrets.get(m.id);
+  if (!sec) return m;
+  let body = m.body;
+  for (const [masked, real] of sec) body = body.split(masked).join(real);
+  return { ...m, body, html: mailHtml(body) };
+}
+const JST_DT = (ms) => {
+  const d = new Date(ms + 9 * 3600e3);
+  return `${d.getUTCFullYear()}年${d.getUTCMonth() + 1}月${d.getUTCDate()}日 ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+};
 
 // tpl（任意）：回数券の情報を含むメールの「本文の作り方」。本文は文字列で固定せず、
 // 送信する直前に tpl から最新の回数券データ（state.tickets＝データベース）で作り直す。
@@ -1019,9 +1077,11 @@ function deliverDueMails() {
       continue;
     }
     if (cfg) {
-      // 実送信（mail-config.jsonのallowToに載っている宛先だけ）。
-      // 結果が返るまで「送信処理中」。成功応答を確認してから「送信済み」にする
-      smtpSend(cfg, m, (err) => {
+      // 実送信（許可された宛先だけ）。結果が返るまで「送信処理中」。成功応答を確認してから「送信済み」にする。
+      // パスワード等の秘密の値は、ここで送る本文にだけ入れる（記録の本文は伏せ字のまま）
+      const out = withMailSecrets(m);
+      mailSecrets.delete(m.id);
+      smtpSend(cfg, out, (err) => {
         if (m.status !== "sending") return; // 二重送信防止
         if (err) {
           m.status = "failed";
@@ -1034,9 +1094,99 @@ function deliverDueMails() {
       });
       continue;
     }
+    mailSecrets.delete(m.id);
     m.status = "sent";
     m.sentAt = now;
   }
+  // 送信待ちでなくなったメール（宛先不正などで失敗したもの）の秘密の値も、メモリから消す
+  for (const id of [...mailSecrets.keys()]) {
+    const mm = state.mails.find((x) => x.id === id);
+    if (!mm || mm.status !== "pending") mailSecrets.delete(id);
+  }
+}
+
+// ---- 会員向けメール（登録完了・パスワード再設定・パスワード変更完了） ----
+const MASK_PASS = "＊＊＊＊＊＊＊＊（店舗側の記録では伏せています。お客様へのメールには実際のパスワードを記載）";
+const MASK_RESET = "（再設定用URL：店舗側の記録では伏せています）";
+// 会員登録完了：ログインID（メール）とパスワードを記載（パスワードはお客様へのメールにだけ入る）
+function queueMemberWelcomeMail(m, plainPass) {
+  const mail = queueMail("customer", "member", m.email,
+    `${MAIL_STORE} 会員登録完了のお知らせ`,
+    [
+      ...(m.name ? [`${m.name} 様`, ""] : []),
+      `この度は「${MAIL_STORE}」の会員にご登録いただきありがとうございます。`,
+      "ご登録内容は以下のとおりです。ログインの際に必要になりますので、このメールを大切に保管してください。",
+      "",
+      SEP,
+      `ログインID（メールアドレス）：${m.email}`,
+      `パスワード：${MASK_PASS}`,
+      `ご登録日時：${JST_DT(m.createdAt)}`,
+      SEP,
+      "ログインはこちら ⇒",
+      `${origin()}/login`,
+      "",
+      "予約サイト右上の「ログイン」からもログインできます。マイページでは、ご予約の確認・日時変更・取消、",
+      "回数券のご購入と残り回数の確認がいつでも行えます。",
+      "また、会員様には【予約】【メニュー】ページの一番上に回数券が表示され、ご予約の際にお使いいただけます。",
+      "",
+      "■パスワードをお忘れの場合",
+      "下記のURLからご登録のメールアドレスを入力すると、パスワード再設定用のURLをお送りします。",
+      `${origin()}/login?forgot=1`,
+      "",
+      "※このメールにはパスワードが記載されています。第三者に見られないようご注意ください。",
+      "※このメールにお心当たりがない場合は、お手数ですが店舗までご連絡ください。",
+      `ご連絡先：${VISIT_CONTACT_MAIL}`,
+    ].join("\n") + MAIL_COMMON,
+    Date.now(), null);
+  mailSecrets.set(mail.id, [[MASK_PASS, plainPass]]);
+  deliverDueMails();
+}
+// パスワード再設定のご案内（URLは60分・1回限り有効。URLはお客様へのメールにだけ入る）
+function queueMemberResetMail(m, token, exp) {
+  const url = `${origin()}/login?reset=${token}`;
+  const mail = queueMail("customer", "member", m.email,
+    `${MAIL_STORE} パスワード再設定のご案内`,
+    [
+      ...(m.name ? [`${m.name} 様`, ""] : []),
+      "パスワード再設定のご依頼を受け付けました。",
+      "下記のURLを開き、新しいパスワードを設定してください。",
+      "",
+      SEP,
+      "パスワード再設定用URL",
+      MASK_RESET,
+      `有効期限：${JST_DT(exp)} まで（1回のみ有効）`,
+      SEP,
+      "有効期限を過ぎた場合や、すでに使用したURLは開けません。お手数ですが、下記から改めてお手続きください。",
+      `${origin()}/login?forgot=1`,
+      "",
+      "※このメールにお心当たりがない場合は、このメールを破棄してください。パスワードは変更されません。",
+    ].join("\n") + MAIL_COMMON,
+    Date.now(), null);
+  mailSecrets.set(mail.id, [[MASK_RESET, url]]);
+  deliverDueMails();
+}
+// パスワード変更完了のお知らせ（本人が気づけるように。パスワード自体は記載しない）
+function queueMemberPassChangedMail(m, via) {
+  queueMail("customer", "member", m.email,
+    `${MAIL_STORE} パスワード変更完了のお知らせ`,
+    [
+      ...(m.name ? [`${m.name} 様`, ""] : []),
+      "会員パスワードの変更が完了しました。",
+      "",
+      SEP,
+      `ログインID（メールアドレス）：${m.email}`,
+      `変更日時：${JST_DT(Date.now())}`,
+      `変更方法：${via === "reset" ? "パスワード再設定用URL" : "マイページの会員情報"}`,
+      SEP,
+      "新しいパスワードで、予約サイト右上の「ログイン」からログインしてください。",
+      `${origin()}/login`,
+      "",
+      "※このお手続きにお心当たりがない場合は、すぐに下記からパスワードを再設定し、店舗までご連絡ください。",
+      `${origin()}/login?forgot=1`,
+      `ご連絡先：${VISIT_CONTACT_MAIL}`,
+    ].join("\n") + MAIL_COMMON,
+    Date.now(), null);
+  deliverDueMails();
 }
 
 const MAIL_STORE = "Ueno spa&massage CN Health & Beauty SALON";
@@ -3081,25 +3231,7 @@ function handleDemoApi(req, res, url) {
           phone: String(b.phone || "").trim().slice(0, 40), createdAt: Date.now(), bookings: [], tickets: [] };
         state.members.set(email, m);
         registered = true;
-        queueMail("customer", "member", email,
-          `${MAIL_STORE} 会員登録完了のお知らせ`,
-          [
-            ...(m.name ? [`${m.name} 様`, ""] : []),
-            `この度は「${MAIL_STORE}」の会員にご登録いただきありがとうございます。`,
-            "ご登録内容は以下のとおりです。ログインの際にご利用ください。",
-            "",
-            SEP,
-            `ログインID（メールアドレス）：${email}`,
-            "パスワード：ご登録時に設定されたもの（セキュリティのためメールには記載しておりません）",
-            SEP,
-            "予約サイト右上の「ログイン」からマイページを開くと、ご予約の確認・日時変更・取消、",
-            "回数券のご購入と残り回数の確認がいつでも行えます。",
-            "また、会員様には【予約】【メニュー】ページの一番上に回数券が表示され、ご予約の際にお使いいただけます。",
-            "パスワードをお忘れの場合は、ログイン画面の「パスワードを忘れた方はこちら」から仮パスワードを発行できます。",
-            `${origin()}/mypage`,
-          ].join("\n") + MAIL_COMMON,
-          Date.now(), null);
-        deliverDueMails();
+        queueMemberWelcomeMail(m, pass); // ログインID＋パスワード入り（パスワードは記録には残さない）
       }
       state.memberFails.delete(email);
       // このブラウザに保存されていた予約・回数券（予約ID＋トークン＝本人の証明）を会員に紐付ける
@@ -3128,31 +3260,56 @@ function handleDemoApi(req, res, url) {
     res.end(JSON.stringify({ ok: true }));
     return true;
   }
-  // パスワードを忘れた場合：仮パスワードを発行してメールで送る（本人のメールにしか届かない）
+  // パスワードを忘れた場合：再設定用URL（60分・1回限り）を本人のメールに送る。仮パスワードは発行しない
   if (url.pathname === "/api/member/reset" && req.method === "POST") {
     readJson(req, res, 1e4, (b) => {
       const email = normEmail(b.email);
       const m = state.members.get(email);
-      // 登録の有無を推測させない（どちらでも同じ応答）
+      pruneResets();
+      // 登録の有無を推測させない（登録が無くても同じ応答）。連打で大量に送らないよう、
+      // 同じアドレスへの再設定メールは1分に1通まで
       if (m) {
-        const temp = crypto.randomBytes(4).toString("hex");
-        m.pass = hashPass(temp);
-        queueMail("customer", "member", email,
-          `${MAIL_STORE} 仮パスワードのお知らせ`,
-          [
-            "パスワード再設定のご依頼を受け付けました。以下の仮パスワードでログインしてください。",
-            "",
-            SEP,
-            `仮パスワード：${temp}`,
-            SEP,
-            "ログイン後、マイページの「会員情報」から新しいパスワードに変更してください。",
-            `${origin()}/login`,
-          ].join("\n") + MAIL_COMMON,
-          Date.now(), null);
-        deliverDueMails();
+        const recent = [...state.memberResets.values()].some((r) => r.email === email && !r.used && Date.now() - r.created < 60000);
+        if (!recent) {
+          const token = crypto.randomBytes(32).toString("hex");
+          const exp = Date.now() + RESET_TTL;
+          state.memberResets.set(sha256(token), { email, created: Date.now(), exp, used: false });
+          queueMemberResetMail(m, token, exp);
+        }
       }
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ ok: true }));
+      res.end(JSON.stringify({ ok: true, ttlMinutes: RESET_TTL / 60000 }));
+    });
+    return true;
+  }
+  // 再設定用URLの確認（画面を開いた時点で、有効・期限切れ・使用済みを案内する）
+  if (url.pathname === "/api/member/reset/check" && (req.method === "GET" || req.method === "HEAD")) {
+    const r = resetLookup(url.searchParams.get("token"));
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    return res.end(req.method === "HEAD" ? undefined : JSON.stringify(r.ok
+      ? { ok: true, email: maskEmail(r.rec.email), exp: r.rec.exp }
+      : { ok: false, error: r.error }));
+  }
+  // 新しいパスワードの設定：URLは1回限り。設定後は他の端末のログインをすべて解除し、この端末でログインする
+  if (url.pathname === "/api/member/reset/confirm" && req.method === "POST") {
+    readJson(req, res, 1e4, (b) => {
+      const r = resetLookup(b.token);
+      if (!r.ok) throw err(400, r.error);
+      const newPass = String(b.pass || "").replace(/＠/g, "@").replace(/　/g, " ").trim();
+      if (newPass.length < 6) throw err(400, "shortPass");
+      const m = state.members.get(r.rec.email);
+      if (!m) throw err(400, "resetInvalid");
+      m.pass = hashPass(newPass);
+      // この会員の再設定URLはすべて無効にする（同時に何通か届いていても、使えるのは今の1回だけ）
+      for (const [k, rec] of state.memberResets) if (rec.email === m.email) state.memberResets.delete(k);
+      for (const [t, sess] of state.memberSessions) if (sess.email === m.email) state.memberSessions.delete(t);
+      state.memberFails.delete(m.email);
+      const token = crypto.randomBytes(24).toString("hex");
+      state.memberSessions.set(token, { email: m.email, created: Date.now() });
+      authLogPush({ kind: "member", user: m.email, ok: true, ip: req.socket.remoteAddress || "", reset: true });
+      queueMemberPassChangedMail(m, "reset");
+      res.writeHead(200, { "Content-Type": "application/json", "Set-Cookie": `cn_member=${token}; ${MEMBER_COOKIE_FLAGS}` });
+      res.end(JSON.stringify({ ok: true, member: memberPublic(m) }));
     });
     return true;
   }
@@ -3193,6 +3350,7 @@ function handleDemoApi(req, res, url) {
         if (np.length < 6) throw err(400, "shortPass");
         if (m.pass !== hashPass(String(b.pass || "").trim())) throw err(401, "invalidLogin");
         m.pass = hashPass(np);
+        queueMemberPassChangedMail(m, "mypage");
       }
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ ok: true, member: memberPublic(m) }));

@@ -472,6 +472,14 @@ server.on("listening", () => {
     if (PUBLIC_HOSTS.length) {
       console.log(`  予約サイト : https://${PUBLIC_HOSTS[0]}/`);
       console.log(`  管理画面   : https://${PUBLIC_HOSTS[0]}/cnsalon-board （要ログイン）`);
+      // 無料プランは15分アクセスが無いと停止し、その間はリマインドメール（来店24時間前）を送れない。
+      // 10分ごとに自分の公開URLへ軽いアクセスをして、停止させずに時刻どおり送れるようにする。
+      // 止めたい場合は環境変数 KEEP_AWAKE=0
+      if (process.env.KEEP_AWAKE !== "0") {
+        const ping = () => fetch(`https://${PUBLIC_HOSTS[0]}/api/tickets/plans`).catch(() => {});
+        setInterval(ping, 10 * 60000);
+        console.log("  稼働維持   : 10分ごとに自動アクセス（リマインドメールを時刻どおり送るため／KEEP_AWAKE=0 で停止）");
+      }
     }
     return; // ポート80/443・mDNS・トンネルはローカル専用機能のため起動しない
   }

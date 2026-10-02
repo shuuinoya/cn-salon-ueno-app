@@ -6,3 +6,9 @@
   .content:not(:has(> .side-column)) { justify-content: center; }
   .content:not(:has(> .side-column)) > .main-column { padding-right: 0; }
 }
+
+/* スマホ幅（767px以下）：元のCSSは右上の「ログイン」ボタンを隠しており、スマホから会員ログイン・
+   新規会員登録に入れなかった。ヘッダーに収まる幅で表示する（ログイン中は「マイページ」になる） */
+@media (max-width: 767px) {
+  .header-actions .login-button { display: flex; width: 60px; min-width: 60px; }
+}

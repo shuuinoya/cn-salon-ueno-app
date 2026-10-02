@@ -22,7 +22,7 @@
     toLogin: "Already a member? Log in",
     register: "Create account", registerTitle: "Sign up (free)",
     name: "Your name", pass2: "Password (confirm)", passHint: "6 or more characters",
-    registerNote: "After signing up you will receive a confirmation email with your login ID. Members can buy and use multi-visit tickets from the top of the Booking and Menu pages.",
+    registerNote: "After signing up you will receive a confirmation email with your login ID and password. Members can buy and use multi-visit tickets from the top of the Booking and Menu pages.",
     registered: (e) => "Your account has been created. A confirmation email has been sent to " + e + ".",
     invalid: "The email address or password is incorrect. If you are new, please create an account.",
     exists: "This email address is already registered. Please log in.",
@@ -32,8 +32,16 @@
     tooMany: "Too many attempts. Please wait a minute and try again.",
     badEmail: "Please enter a valid email address.",
     fail: "Could not complete. Please try again later.",
-    resetAsk: "Enter your registered email address. We will send a temporary password.",
-    resetDone: "If the address is registered, a temporary password has been sent.",
+    forgotTitle: "Reset your password", resetTitle: "Set a new password", backToLogin: "Back to log in",
+    forgotLead: "Enter your registered email address. We will email you a link to set a new password (valid for 60 minutes, single use).",
+    forgotSend: "Send reset link",
+    forgotDone: (e) => "If " + e + " is registered, we have sent a password reset link. Please check your inbox (and spam folder). The link is valid for 60 minutes.",
+    resetChecking: "Checking the link…",
+    resetLead: (e) => "Set a new password for " + e + ".",
+    newPass: "New password", resetSubmit: "Change password", resetAgain: "Request a new link",
+    resetDoneMsg: "Your password has been changed. You are now logged in.",
+    resetInvalid: "This link is invalid or has already been used. Please request a new link.",
+    resetExpired: "This link has expired (valid for 60 minutes). Please request a new link.",
     heading: "Log in", member: "Member menu", hello: (n) => (n ? n + " " : "") + "(member)",
     tickets: "Your tickets", noTickets: "No tickets yet", left: (n) => n + " left", logout: "Log out", seeTickets: "Tickets",
   } : {
@@ -43,7 +51,7 @@
     toLogin: "会員の方はこちら（ログイン）",
     register: "登録する", registerTitle: "新規会員登録（無料）",
     name: "お名前", pass2: "パスワード（確認）", passHint: "6文字以上",
-    registerNote: "登録が完了すると、ログインID（メールアドレス）を記載した「会員登録完了のお知らせ」メールをお送りします。会員様は【予約】【メニュー】ページの一番上から回数券をご購入・ご利用いただけます。",
+    registerNote: "登録が完了すると、ログインID（メールアドレス）とパスワードを記載した「会員登録完了のお知らせ」メールをお送りします。会員様は【予約】【メニュー】ページの一番上から回数券をご購入・ご利用いただけます。",
     registered: (e) => "会員登録が完了しました。\n「会員登録完了のお知らせ」を " + e + " にお送りしました。",
     invalid: "メールアドレスまたはパスワードが違います。はじめての方は「新規会員登録」からご登録ください。",
     exists: "このメールアドレスはすでに登録されています。ログインしてください。",
@@ -53,12 +61,21 @@
     tooMany: "試行回数が多すぎます。1分ほど待ってからお試しください。",
     badEmail: "メールアドレスの形式を確認してください。",
     fail: "処理できませんでした。時間をおいてお試しください。",
-    resetAsk: "ご登録のメールアドレスを入力してください。仮パスワードをお送りします。",
-    resetDone: "ご登録のアドレスであれば、仮パスワードをお送りしました。メールをご確認ください。",
+    forgotTitle: "パスワードの再設定", resetTitle: "新しいパスワードの設定", backToLogin: "ログイン画面に戻る",
+    forgotLead: "ご登録のメールアドレスを入力してください。新しいパスワードを設定するためのURLをメールでお送りします（有効期限60分・1回のみ有効）。",
+    forgotSend: "再設定用のメールを送る",
+    forgotDone: (e) => e + " がご登録のアドレスであれば、パスワード再設定用のURLをお送りしました。メールをご確認ください（届かない場合は迷惑メールフォルダもご確認ください）。URLの有効期限は60分です。",
+    resetChecking: "URLを確認しています…",
+    resetLead: (e) => e + " の新しいパスワードを設定してください。",
+    newPass: "新しいパスワード", resetSubmit: "パスワードを変更する", resetAgain: "再設定用のメールをもう一度送る",
+    resetDoneMsg: "パスワードを変更しました。新しいパスワードでログインしています。\n変更完了のお知らせをメールでお送りしました。",
+    resetInvalid: "このURLは無効か、すでに使用済みです。お手数ですが、もう一度再設定用のメールをお送りください。",
+    resetExpired: "このURLは有効期限（60分）が過ぎています。お手数ですが、もう一度再設定用のメールをお送りください。",
     heading: "ログイン", member: "会員メニュー", hello: (n) => (n ? n + " 様" : "会員様"),
     tickets: "保有中の回数券", noTickets: "保有中の回数券はありません", left: (n) => "残り " + n + "回", logout: "ログアウト", seeTickets: "回数券を見る・購入する",
   };
 
+  const INIT_Q = (() => { try { return new URLSearchParams(location.search); } catch { return new URLSearchParams(); } })();
   const ls = (k) => { try { return JSON.parse(localStorage.getItem(k) || "[]"); } catch { return []; } };
   const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
@@ -88,6 +105,7 @@
     ".cn-switch{display:flex;align-items:center;justify-content:center;width:100%;min-height:48px;margin:12px 0 6px;border:1px solid #c5a15e;border-radius:8px;background:#fff;color:#8a6a33;font-size:16px;font-weight:700;cursor:pointer}" +
     ".cn-note{font-size:12.5px;color:#777;line-height:1.7;margin:4px 0 8px}" +
     ".cn-err{color:#c0392b;font-size:14px;margin:-4px 0 10px;white-space:pre-line}" +
+    ".cn-ok{color:#2e6b34;background:#eef7ee;border:1px solid #cfe5cf;border-radius:6px;font-size:14px;line-height:1.7;padding:10px 12px;margin:0 0 10px}" +
     ".cn-lfoot{padding:18px 22px;border-top:1px solid #e6e6e6;text-align:center}" +
     ".cn-cancel{border:1px solid #9a9a9a;background:#fff;border-radius:8px;padding:14px 34px;font-size:17px;color:#333;cursor:pointer}" +
     ".cn-inline .cn-lf{padding:6px 22px 16px}" +
@@ -118,8 +136,10 @@
   const ICON_LOCK = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0"/></svg>';
   const ICON_USER = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>';
 
-  // ログイン（mode="login"）／新規会員登録（mode="register"）のフォーム
-  function authHtml(mode) {
+  // フォームの種類：login（ログイン）／register（新規会員登録）／forgot（パスワードを忘れた方）／
+  // reset（メールの再設定用URLから開いた、新しいパスワードの設定。opts.token が必要）
+  const TITLE = (m) => ({ register: T.registerTitle, forgot: T.forgotTitle, reset: T.resetTitle }[m] || T.login);
+  function authHtml(mode, opts) {
     const field = (label, icon, input, hint) => "<label>" + label + (hint ? "<small>" + hint + "</small>" : "") +
       '<span class="cn-in">' + icon + input + "</span></label>";
     if (mode === "register") {
@@ -136,6 +156,32 @@
         "</form>"
       );
     }
+    if (mode === "forgot") {
+      return (
+        '<form class="cn-lf" novalidate data-mode="forgot">' +
+        '<p class="cn-note" style="font-size:14px;color:#444;margin:0 0 14px">' + T.forgotLead + "</p>" +
+        field(T.email, ICON_MAIL, '<input type="email" name="email" autocomplete="email" inputmode="email" required>') +
+        '<p class="cn-err" hidden></p>' +
+        '<p class="cn-ok" hidden></p>' +
+        '<button type="submit" class="cn-gold">' + T.forgotSend + "</button>" +
+        '<button type="button" class="cn-switch" data-to="login">' + T.backToLogin + "</button>" +
+        "</form>"
+      );
+    }
+    if (mode === "reset") {
+      return (
+        '<form class="cn-lf" novalidate data-mode="reset">' +
+        '<p class="cn-note cn-reset-lead" style="font-size:14px;color:#444;margin:0 0 14px">' + T.resetChecking + "</p>" +
+        '<div class="cn-reset-fields" hidden>' +
+        field(T.newPass, ICON_LOCK, '<input type="password" name="pass" autocomplete="new-password" required>', T.passHint) +
+        field(T.pass2, ICON_LOCK, '<input type="password" name="pass2" autocomplete="new-password" required>') +
+        "</div>" +
+        '<p class="cn-err" hidden></p>' +
+        '<button type="submit" class="cn-gold" disabled>' + T.resetSubmit + "</button>" +
+        '<button type="button" class="cn-switch" data-to="forgot" hidden>' + T.resetAgain + "</button>" +
+        "</form>"
+      );
+    }
     return (
       '<form class="cn-lf" novalidate data-mode="login">' +
       field(T.email, ICON_MAIL, '<input type="email" name="email" autocomplete="email" inputmode="email" required>') +
@@ -148,23 +194,85 @@
     );
   }
 
+  const post = async (url, body) => {
+    const r = await fetch(url, { method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    return { ok: r.ok, j: await r.json().catch(() => ({})) };
+  };
+  const ERR = () => ({ invalidLogin: T.invalid, shortPass: T.shortPass, tooManyAttempts: T.tooMany, badEmail: T.badEmail,
+    alreadyRegistered: T.exists, resetInvalid: T.resetInvalid, resetExpired: T.resetExpired });
+
   // container の中にフォームを作り、動作を付ける。onMode(mode) は見出しの切り替え用
-  function mount(container, mode, onMode) {
-    container.innerHTML = authHtml(mode);
+  function mount(container, mode, onMode, opts) {
+    opts = opts || {};
+    container.innerHTML = authHtml(mode, opts);
     if (onMode) onMode(mode);
     const form = container.querySelector("form.cn-lf");
     const errBox = container.querySelector(".cn-err");
     const showErr = (msg) => { errBox.textContent = msg; errBox.hidden = !msg; };
-    container.querySelector(".cn-switch").addEventListener("click", () => {
-      const keepEmail = form.email.value;
-      mount(container, mode === "login" ? "register" : "login", onMode);
+    const go = (to) => {
+      const keepEmail = form.email ? form.email.value : "";
+      mount(container, to, onMode, {});
       const em = container.querySelector('input[name="email"]');
-      if (em) em.value = keepEmail;
+      if (em && keepEmail) em.value = keepEmail;
       container.querySelector("input")?.focus();
-    });
+    };
+    container.querySelector(".cn-switch")?.addEventListener("click", (e) => go(e.currentTarget.dataset.to));
+    container.querySelector(".cn-forgot")?.addEventListener("click", (e) => { e.preventDefault(); go("forgot"); });
+
+    // メールの再設定用URLから開いた場合：URLが有効か先に確かめて、案内を出す
+    if (mode === "reset") {
+      const lead = container.querySelector(".cn-reset-lead");
+      const btn = form.querySelector(".cn-gold");
+      (async () => {
+        try {
+          const r = await fetch("/api/member/reset/check?token=" + encodeURIComponent(opts.token || ""), { cache: "no-store" });
+          const j = await r.json();
+          if (j.ok) {
+            lead.textContent = T.resetLead(j.email);
+            container.querySelector(".cn-reset-fields").hidden = false;
+            btn.disabled = false;
+            form.pass.focus();
+          } else {
+            lead.textContent = j.error === "resetExpired" ? T.resetExpired : T.resetInvalid;
+            btn.hidden = true;
+            container.querySelector(".cn-switch").hidden = false;
+          }
+        } catch { lead.textContent = T.fail; }
+      })();
+    }
+
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       showErr("");
+      const btn = form.querySelector(".cn-gold");
+      if (mode === "forgot") {
+        const email = form.email.value.trim();
+        if (!email || !email.includes("@")) return showErr(T.badEmail);
+        btn.disabled = true;
+        try {
+          const { ok } = await post("/api/member/reset", { email });
+          if (!ok) throw new Error("reset");
+          const okBox = container.querySelector(".cn-ok");
+          okBox.textContent = T.forgotDone(email);
+          okBox.hidden = false;
+          btn.hidden = true;
+        } catch { showErr(T.fail); btn.disabled = false; }
+        return;
+      }
+      if (mode === "reset") {
+        const pass = form.pass.value;
+        if (pass.trim().length < 6) return showErr(T.shortPass);
+        if (pass !== form.pass2.value) return showErr(T.passMismatch);
+        btn.disabled = true;
+        try {
+          const { ok, j } = await post("/api/member/reset/confirm", { token: opts.token, pass });
+          if (!ok || !j.ok) { showErr(ERR()[j.error] || T.fail); btn.disabled = false; return; }
+          window.alert(T.resetDoneMsg);
+          location.href = "/mypage";
+        } catch { showErr(T.fail); btn.disabled = false; }
+        return;
+      }
       const email = form.email.value.trim();
       const pass = form.pass.value;
       const name = mode === "register" ? form.name.value.trim() : "";
@@ -174,22 +282,14 @@
         if (pass.trim().length < 6) return showErr(T.shortPass);
         if (pass !== form.pass2.value) return showErr(T.passMismatch);
       } else if (!pass) return showErr(T.shortPass);
-      const btn = form.querySelector(".cn-gold");
       btn.disabled = true;
       try {
         const link = {
           bookings: ls("cn-mypage").map((x) => ({ id: x.id, token: x.token })),
           tickets: ls("cn-tickets").map((x) => ({ id: x.id, token: x.token })),
         };
-        const r = await fetch("/api/member/login", { method: "POST", credentials: "same-origin",
-          headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, pass, name, mode, link }) });
-        const j = await r.json().catch(() => ({}));
-        if (!r.ok || !j.ok) {
-          showErr({ invalidLogin: T.invalid, shortPass: T.shortPass, tooManyAttempts: T.tooMany, badEmail: T.badEmail,
-            alreadyRegistered: T.exists }[j.error] || T.fail);
-          btn.disabled = false;
-          return;
-        }
+        const { ok, j } = await post("/api/member/login", { email, pass, name, mode, link });
+        if (!ok || !j.ok) { showErr(ERR()[j.error] || T.fail); btn.disabled = false; return; }
         if (j.registered) window.alert(T.registered(j.member.email));
         if (location.pathname === "/login") location.href = "/mypage";
         else location.reload();
@@ -197,16 +297,6 @@
         showErr(T.fail);
         btn.disabled = false;
       }
-    });
-    container.querySelector(".cn-forgot")?.addEventListener("click", async (e) => {
-      e.preventDefault();
-      const email = window.prompt(T.resetAsk, form.email.value.trim());
-      if (!email) return;
-      try {
-        await fetch("/api/member/reset", { method: "POST", credentials: "same-origin",
-          headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email.trim() }) });
-      } catch {}
-      window.alert(T.resetDone);
     });
   }
 
@@ -221,8 +311,8 @@
     document.body.appendChild(ov);
     document.body.style.overflow = "hidden";
     const h2 = ov.querySelector(".cn-lh h2");
-    mount(ov.querySelector(".cn-auth"), mode === "register" ? "register" : "login",
-      (m) => { h2.textContent = m === "register" ? T.registerTitle : T.login; });
+    mount(ov.querySelector(".cn-auth"), ["register", "forgot"].includes(mode) ? mode : "login",
+      (m) => { h2.textContent = TITLE(m); });
     ov.querySelector(".cn-cancel").addEventListener("click", close);
     ov.addEventListener("click", (e) => { if (e.target === ov) close(); });
     setTimeout(() => ov.querySelector("form input")?.focus(), 50);
@@ -262,15 +352,24 @@
     if (location.pathname !== "/login") return;
     const card = document.querySelector(".login-card");
     if (!card || card.dataset.cnReady) return;
-    if (CNMember.me) { location.replace("/mypage"); return; }
+    // ログイン中でも、メールの再設定用URLから来た場合はパスワード設定画面を出す
+    const hasReset = !!INIT_Q.get("reset");
+    if (CNMember.me && !hasReset) { location.replace("/mypage"); return; }
     ensureStyle();
     card.dataset.cnReady = "1";
     card.classList.add("cn-inline");
     card.innerHTML = "<h2></h2><div class=\"cn-auth\"></div>";
     const h2 = card.querySelector("h2");
-    let mode = "login";
-    try { if (new URLSearchParams(location.search).get("register") === "1") mode = "register"; } catch {}
-    mount(card.querySelector(".cn-auth"), mode, (m) => { h2.textContent = m === "register" ? T.registerTitle : T.heading; });
+    // 画面の種類は「ページを開いた瞬間のURL」で決める（予約サイトの画面部品が描き直しても同じ画面に戻す）
+    let mode = "login", opts = {};
+    if (INIT_Q.get("register") === "1") mode = "register";
+    else if (INIT_Q.get("forgot") === "1") mode = "forgot";
+    else if (INIT_Q.get("reset")) {
+      mode = "reset"; opts = { token: INIT_Q.get("reset") };
+      // 再設定用の合言葉はアドレス欄・履歴に残さない（開いた時点で控え済み）
+      try { if (location.search) history.replaceState(history.state, "", "/login"); } catch {}
+    }
+    mount(card.querySelector(".cn-auth"), mode, (m) => { h2.textContent = m === "login" ? T.heading : TITLE(m); }, opts);
   }
   // 右の列（トップ・日時選択）：未ログインならログイン欄、ログイン中は会員メニューを一番上に出す
   function applySide() {
@@ -291,7 +390,7 @@
       const h2 = card.querySelector("h2");
       const auth = card.querySelector(".cn-auth");
       mount(auth, "login", (m) => {
-        h2.textContent = m === "register" ? T.registerTitle : T.login;
+        h2.textContent = TITLE(m);
         // 右の列は幅が狭いので、新規登録への切り替えボタンは短い文言にする
         const sw = auth.querySelector('.cn-switch[data-to="register"]');
         if (sw) sw.textContent = T.toRegisterShort;
@@ -317,7 +416,7 @@
     applyHeader(); applyLoginPage(); applySide();
     // ?login=1／?register=1 付きのURL（メール等からのリンク）では、未ログインならログイン・登録画面を自動で開く
     try {
-      const q = new URLSearchParams(location.search);
+      const q = INIT_Q;
       if (!CNMember.me && location.pathname !== "/login") {
         if (q.get("register") === "1") open("register");
         else if (q.get("login") === "1") open("login");
