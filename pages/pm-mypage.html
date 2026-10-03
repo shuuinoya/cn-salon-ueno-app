@@ -290,7 +290,7 @@
       (withButtons && !cancelled && row.bk.start > Date.now()
         ? '<div class="btnrow">' +
           (member && /^[\w-]+$/.test(String(row.bk.courseId || ""))
-            ? '<a class="gold" href="/book/select-datetime/' + esc(row.bk.courseId) + "?reschedule=" + encodeURIComponent(row.entry.id) + '">' + changeLabel() + "</a>"
+            ? '<a class="gold" href="/book/select-datetime?courses=' + encodeURIComponent(row.bk.courseId) + "&reschedule=" + encodeURIComponent(row.entry.id) + '">' + changeLabel() + "</a>" // 予約サイトの日時選択ページの正しいURL（?courses=）
             : "") +
           '<button type="button" class="cancel" data-cancel="' + esc(row.entry.id) + '">' + t.cancelBtn + "</button></div>"
         : "") +

@@ -382,6 +382,10 @@ const handler = (req, res) => {
   // ログアウト経由でログイン画面に来たらセッションを破棄する
   if (url.pathname === "/admin/login" && url.searchParams.get("out") === "1") {
     clearSession(req, res);
+  } else if ((url.pathname === "/admin/login" || url.pathname.toLowerCase() === "/cnsalon-board") && isAdminSession(req)) {
+    // すでにログイン中なら、ログイン画面を出さずに予約台帳へ（毎回ログインし直さなくてよい）
+    res.writeHead(302, { Location: "/admin" });
+    return res.end();
   }
 
 

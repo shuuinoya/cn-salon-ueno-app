@@ -5,6 +5,16 @@
   "use strict";
   let settings = null;
 
+  // Reactがサーバーのページを引き継ぐ（ハイドレーション）前に書き換えるとエラー（#418）になり
+  // 画面が描き直されるため、ページの書き換えは引き継ぎが終わってから行う（最長6秒待つ）
+  const startedAt = Date.now();
+  const canTouch = () => {
+    if (Date.now() - startedAt > 6000) return true;
+    const el = document.querySelector(".site-header") || document.querySelector(".page-shell");
+    return !el || Object.keys(el).some((k) => k.startsWith("__reactFiber"));
+  };
+  const whenHydrated = new Promise((resolve) => { const t = () => (canTouch() ? resolve() : setTimeout(t, 50)); t(); });
+
   // 入力欄の書体を明示：環境によって数字が高さバラバラの書体（オールドスタイル数字）に
   // 落ちるのを防ぎ、電話番号・メール等が揃った字形で表示されるようにする
   (function fontFix() {
@@ -559,7 +569,7 @@
     }
   }
 
-  load().then(apply);
+  Promise.all([load(), whenHydrated]).then(apply);
   function decorateTicketComplete() {
     if (!location.pathname.includes("/book/complete")) return;
     let used = null;
@@ -617,6 +627,6 @@
     dl.before(p);
   }
 
-  setInterval(() => { apply(); decorateConsent(); decorateComplete(); decorateTicketBanner(); decorateTicketPick(); decorateTicketComplete(); decorateReschedule(); decorateRescheduleComplete(); }, 700);
+  setInterval(() => { if (!canTouch()) return; apply(); decorateConsent(); decorateComplete(); decorateTicketBanner(); decorateTicketPick(); decorateTicketComplete(); decorateReschedule(); decorateRescheduleComplete(); }, 700);
   setInterval(() => { load(); }, 15000);
 })();

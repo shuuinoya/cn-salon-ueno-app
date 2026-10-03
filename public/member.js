@@ -412,7 +412,22 @@
       "</div>";
     card.querySelector(".cn-out").addEventListener("click", logout);
   }
-  CNMember.ready.then(() => {
+  // 予約サイトの画面部品（React）がサーバーのHTMLを引き継ぐ（ハイドレーション）前にページを書き換えると、
+  // Reactが「内容が違う」とエラー（#418）を出して画面を描き直してしまう。引き継ぎが終わってから書き換える
+  const isReactPage = !!document.querySelector('script[src*="/_next/static/chunks/"]');
+  const hydrated = () => {
+    if (!isReactPage) return true;
+    const el = document.querySelector(".site-header") || document.querySelector(".page-shell");
+    return !el || Object.keys(el).some((k) => k.startsWith("__reactFiber"));
+  };
+  const startedAt = Date.now();
+  const canTouch = () => hydrated() || Date.now() - startedAt > 6000; // 念のため最長6秒で開始
+  const whenHydrated = new Promise((resolve) => {
+    const tick = () => (canTouch() ? resolve() : setTimeout(tick, 50));
+    tick();
+  });
+  CNMember.hydrated = whenHydrated;
+  Promise.all([CNMember.ready, whenHydrated]).then(() => {
     applyHeader(); applyLoginPage(); applySide();
     // ?login=1／?register=1 付きのURL（メール等からのリンク）では、未ログインならログイン・登録画面を自動で開く
     try {
@@ -423,5 +438,5 @@
       }
     } catch {}
   });
-  setInterval(() => { applyHeader(); applyLoginPage(); applySide(); }, 700);
+  setInterval(() => { if (!canTouch()) return; applyHeader(); applyLoginPage(); applySide(); }, 700);
 })();
