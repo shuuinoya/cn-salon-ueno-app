@@ -227,9 +227,12 @@ function describeSendError(err, cfg) {
 // Googleの送信中継（Google Apps Script のウェブアプリ）へ https で送る。
 // 送信元は中継を作ったGoogleアカウントのGmail。secret が一致したときだけ中継側が送信する
 function relaySend(cfg, mail, done) {
+  if (!/^https:\/\/\S+$/.test(String(cfg.relayUrl).trim())) {
+    return done(new Error("Render の MAIL_RELAY_URL に、Google Apps Script の「ウェブアプリのURL」（https://script.google.com/macros/s/…/exec）が入っていません。今の値はURLではないため送信できません"));
+  }
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), 30000);
-  fetch(cfg.relayUrl, {
+  fetch(String(cfg.relayUrl).trim(), {
     method: "POST", redirect: "follow", signal: ctl.signal,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ secret: cfg.relaySecret, to: mail.to, subject: mail.subject, text: mail.body, html: mail.html, fromName: MAIL_STORE }),
