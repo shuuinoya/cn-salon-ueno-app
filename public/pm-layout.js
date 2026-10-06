@@ -380,6 +380,7 @@
         ["メニュー一覧", openMenuList],
         ["回数券管理", openTicketAdmin],
         ["ホットペッパー連携", () => { location.href = "/admin/hotpepper"; }],
+        ["メール送信設定", () => { location.href = "/admin/mail-setup"; }],
         ["ブース情報", null],
         ["経費マスタ", null],
         ["クレジットカード会社情報", null],
@@ -649,6 +650,12 @@
       a.textContent = "送信メールを確認（デモ）";
       a.style.cssText = "display:inline-block;text-decoration:none;margin-left:8px;";
       mailSec.querySelector("button")?.insertAdjacentElement("afterend", a);
+      const a2 = document.createElement("a");
+      a2.className = "pm-red";
+      a2.href = "/admin/mail-setup";
+      a2.textContent = "メール送信設定";
+      a2.style.cssText = "display:inline-block;text-decoration:none;margin-left:8px;";
+      a.insertAdjacentElement("afterend", a2);
     }
 
     // 7b2) メニュー一覧の内容をコース選択肢に反映

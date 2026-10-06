@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>メール送信設定 | CNsalon@board</title>
+<link rel="icon" href="/favicon.svg"/>
+<style>
+  /* メール管理（pm-mails）と同じ配色 */
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #eee6e0;
+    color: #292929;
+    font-family: Arial, "Noto Sans JP", sans-serif;
+    font-size: 14px;
+    line-height: 1.7;
+  }
+  header {
+    background: #987050;
+    color: #fff;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  header b { font-size: 15px; }
+  header a {
+    color: #fff;
+    text-decoration: none;
+    border: 1px solid rgb(255 255 255 / 0.6);
+    border-radius: 3px;
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+  header a:hover { background: rgb(255 255 255 / 0.15); }
+  main { max-width: 760px; margin: 0 auto; padding: 14px 16px 60px; }
+  .status { border-radius: 4px; padding: 10px 14px; margin-bottom: 14px; border: 1px solid; }
+  .status.ok { background: #e9f6ea; border-color: #9fd3a3; color: #22612a; }
+  .status.ng { background: #fdecea; border-color: #e4a29b; color: #8a2a20; }
+  .status.wait { background: #fdf3d7; border-color: #e6c96a; color: #7a5a12; }
+  .status small { display: block; color: inherit; opacity: 0.85; word-break: break-word; }
+  .lead { margin: 0 0 14px; }
+  .step {
+    background: #fff;
+    border: 1px solid #c6b9ad;
+    border-radius: 4px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+  }
+  .step h2 { margin: 0 0 8px; font-size: 16px; display: flex; align-items: center; gap: 10px; }
+  .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 50%;
+    background: #987050; color: #fff; font-size: 15px; flex: none;
+  }
+  .step ol { margin: 6px 0 0; padding-left: 22px; }
+  .step li { margin: 3px 0; }
+  .btn {
+    display: inline-block;
+    font: inherit;
+    font-weight: 700;
+    background: #987050;
+    color: #fff;
+    border: 0;
+    border-radius: 4px;
+    padding: 10px 20px;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .btn:hover { filter: brightness(1.08); }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  .btn.sub { background: #fff; color: #6b5b4b; border: 1px solid #c6b9ad; font-weight: 400; padding: 6px 14px; }
+  .k { background: #f3ede7; border: 1px solid #ddd0c3; border-radius: 3px; padding: 0 6px; white-space: nowrap; }
+  .done { color: #3f9b45; font-weight: 700; margin-left: 8px; }
+  textarea {
+    width: 100%; height: 160px; margin-top: 8px;
+    font: 12px/1.5 Menlo, Consolas, monospace;
+    border: 1px solid #d9cbbd; border-radius: 3px; background: #faf7f4; padding: 8px;
+  }
+  details.code summary { cursor: pointer; color: #8d8d8d; font-size: 12px; margin-top: 8px; }
+  input[type=url], input[type=email] {
+    width: 100%; font: inherit; padding: 9px 10px;
+    border: 1px solid #c6b9ad; border-radius: 3px; margin: 6px 0 10px;
+  }
+  label { font-weight: 700; }
+  .hint { color: #8d8d8d; font-size: 12px; }
+  #result { margin-top: 12px; }
+  .warnline { color: #c0392b; }
+</style>
+</head>
+<body>
+  <header>
+    <b>メール送信設定</b>
+    <a href="/admin">← 予約台帳へ戻る</a>
+    <a href="/admin/mails">メール管理（送信状況）</a>
+  </header>
+  <main>
+    <div class="status wait" id="status">設定を確認しています…</div>
+    <p class="lead">予約完了・リマインド・店舗への新着通知などのメールを、お店のGmailから送れるようにする設定です。<br>
+      下の①〜④を順番に行ってください（10分ほど・無料）。Renderの設定を変える必要はありません。</p>
+
+    <section class="step">
+      <h2><span class="num">1</span>コードをコピーする</h2>
+      <button class="btn" id="copyBtn" type="button">コードをコピー</button><span class="done" id="copied" hidden>コピーしました</span>
+      <details class="code"><summary>▸ コードの中身を見る（コピーがうまくいかないときはここから選んでコピー）</summary>
+        <textarea id="code" readonly spellcheck="false"></textarea>
+      </details>
+    </section>
+
+    <section class="step">
+      <h2><span class="num">2</span>Googleのページに貼り付けて保存する</h2>
+      <a class="btn" href="https://script.new" target="_blank" rel="noopener">Googleのページを開く（新しいタブ）</a>
+      <ol>
+        <li>メールの送信元にしたい <b>Gmailのアカウント</b> でログインします（このGmailからお客様・店舗にメールが届きます）。</li>
+        <li>最初から入っている文字（<span class="k">function myFunction() {…}</span>）を<b>全部消して</b>、①でコピーしたコードを貼り付けます。</li>
+        <li>上の <span class="k">💾 保存</span> を押します（またはキーボードで <span class="k">⌘＋S</span>／<span class="k">Ctrl＋S</span>）。</li>
+      </ol>
+    </section>
+
+    <section class="step">
+      <h2><span class="num">3</span>「ウェブアプリ」として公開する</h2>
+      <ol>
+        <li>右上の青いボタン <span class="k">デプロイ</span> → <span class="k">新しいデプロイ</span></li>
+        <li>左上の歯車 <span class="k">⚙</span> → <span class="k">ウェブアプリ</span> を選ぶ</li>
+        <li>「次のユーザーとして実行」は <span class="k">自分</span>、「アクセスできるユーザー」は <span class="k">全員</span> にする</li>
+        <li><span class="k">デプロイ</span> → <span class="k">アクセスを承認</span> → 自分のGoogleアカウントを選ぶ</li>
+        <li>「このアプリはGoogleで確認されていません」と出たら、左下の <span class="k">詳細</span> → <span class="k">（プロジェクト名）（安全ではないページ）に移動</span> → <span class="k">許可</span><br>
+          <span class="hint">自分で作ったものなので問題ありません。メールを送る許可を、自分のアカウントに出しているだけです。</span></li>
+      </ol>
+    </section>
+
+    <section class="step">
+      <h2><span class="num">4</span>URLを貼り付けて、テスト送信する</h2>
+      <p style="margin:0 0 6px">③のあとに表示される「ウェブアプリ」のURL（<span class="k">https://script.google.com/macros/s/…/exec</span>）の <span class="k">コピー</span> を押して、下に貼り付けます。</p>
+      <form id="form">
+        <label for="url">ウェブアプリのURL</label>
+        <input type="url" id="url" placeholder="https://script.google.com/macros/s/……/exec" autocomplete="off" required/>
+        <label for="testTo">テストメールの送り先</label>
+        <input type="email" id="testTo" autocomplete="off"/>
+        <button class="btn" id="saveBtn" type="submit">登録してテスト送信</button>
+      </form>
+      <div id="result"></div>
+    </section>
+
+    <p class="hint">※ 無料のGmailは1日100通まで送れます。　※ 設定をやめるときは <button class="btn sub" id="clearBtn" type="button">登録を解除</button></p>
+  </main>
+
+<script>
+(function () {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const fmt = (t) => new Date(t).toLocaleString("ja-JP", { timeZone: "Asia/Tokyo", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  let info = null;
+
+  function showStatus(j) {
+    const st = $("status");
+    if (j.via === "relay-admin" || j.via === "relay-env") {
+      st.className = "status ok";
+      st.innerHTML = "<b>✓ 設定済み：メールはGoogleの送信中継から送られます。</b>" +
+        (j.lastRealSent ? "<small>最後に送信したメール：" + fmt(j.lastRealSent) + "</small>" : "") +
+        (j.via === "relay-env" ? "<small>（Render の環境変数 MAIL_RELAY_URL の設定を使っています）</small>" : "") +
+        "<small>店舗宛ての通知の送り先：" + esc(j.storeMail) + "</small>";
+    } else {
+      st.className = "status ng";
+      st.innerHTML = "<b>⚠ まだ設定が終わっていないため、お客様・店舗のどちらにもメールが届いていません。</b>" +
+        (j.via === "smtp" ? "<small>今の設定（Gmailへの直接送信）は、Render の無料プランでは通信が止められていて使えません。下の①〜④で設定してください。</small>" : "") +
+        (j.lastError ? "<small>直近のエラー：" + esc(j.lastError) + "</small>" : "");
+    }
+  }
+
+  async function load() {
+    const r = await fetch("/api/demo/mail-relay", { cache: "no-store" });
+    if (r.status === 401 || r.status === 403) {
+      $("status").className = "status ng";
+      $("status").textContent = "この設定はマネージャー以上のアカウントで使えます。";
+      return;
+    }
+    info = await r.json();
+    $("code").value = info.script;
+    if (!$("url").value) $("url").value = info.url || "";
+    if (!$("testTo").value) $("testTo").value = info.storeMail || "";
+    showStatus(info);
+  }
+
+  $("copyBtn").addEventListener("click", async () => {
+    const t = $("code");
+    let ok = false;
+    try { await navigator.clipboard.writeText(t.value); ok = true; } catch {}
+    if (!ok) {
+      t.closest("details").open = true;
+      t.focus(); t.select();
+      try { ok = document.execCommand("copy"); } catch {}
+    }
+    $("copied").hidden = !ok;
+    if (!ok) alert("自動でコピーできませんでした。表示されたコードを全部選んでコピーしてください。");
+  });
+
+  $("form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const url = $("url").value.trim();
+    const out = $("result");
+    if (!/^https:\/\/script\.google(usercontent)?\.com\/.+\/exec(\?.*)?$/.test(url)) {
+      out.innerHTML = '<div class="status ng">URLが違うようです。③の最後に表示される「ウェブアプリ」のURL（<b>https://script.google.com/macros/s/</b>で始まり <b>/exec</b> で終わるもの）を貼り付けてください。' +
+        (/\/edit|\/home\//.test(url) ? "<small>※ いま貼り付けたのは編集画面のURLです。</small>" : "") + "</div>";
+      return;
+    }
+    $("saveBtn").disabled = true;
+    out.innerHTML = '<div class="status wait">テストメールを送っています…（最大30秒）</div>';
+    try {
+      const r = await fetch("/api/demo/mail-relay", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, testTo: $("testTo").value.trim() }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error === "badUrl" ? "URLの形式が正しくありません" : (j.error || "HTTP " + r.status));
+      info = j; showStatus(j);
+      if (j.test && j.test.ok) {
+        out.innerHTML = '<div class="status ok"><b>✓ 登録しました。テストメールを ' + esc(j.test.to) + ' に送りました。</b>' +
+          "<small>メールが届いていれば設定は完了です（届かないときは迷惑メールフォルダも見てください）。これからの予約完了・リマインド・店舗への通知は、このGmailから送られます。</small></div>";
+      } else {
+        const m = String((j.test && j.test.error) || "");
+        out.innerHTML = '<div class="status ng"><b>URLは登録しましたが、テストメールを送れませんでした。</b><small>理由：' + esc(m) + "</small>" +
+          (/forbidden/.test(m) ? "<small>→ ①のコードが最新ではありません。①でもう一度コピーして貼り付け、保存したあと「デプロイ → デプロイを管理 → ✎編集 → バージョン：新バージョン → デプロイ」を行ってください。</small>" : "") +
+          (/HTTP 4\d\d|応答が不正/.test(m) ? "<small>→ ③の「アクセスできるユーザー」が <b>全員</b> になっているか確認してください。</small>" : "") + "</div>";
+      }
+    } catch (e2) {
+      out.innerHTML = '<div class="status ng">登録できませんでした：' + esc(e2.message) + "</div>";
+    } finally {
+      $("saveBtn").disabled = false;
+    }
+  });
+
+  $("clearBtn").addEventListener("click", async () => {
+    if (!confirm("送信中継の登録を解除しますか？（解除するとメールが送れなくなります）")) return;
+    const r = await fetch("/api/demo/mail-relay", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "clear" }) });
+    if (r.ok) { $("url").value = ""; $("result").innerHTML = ""; showStatus(await r.json()); }
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>

@@ -192,6 +192,14 @@ function loadMailConfig() {
       allowAll: e.MAIL_SEND_TO_ALL === "1",
     };
   }
+  const sr = typeof state !== "undefined" && state.mailRelay;
+  if (sr && /^https:\/\/\S+$/.test(String(sr.url || "").trim()) && sr.secret) {
+    return {
+      enabled: true, relayUrl: String(sr.url).trim(), relaySecret: sr.secret, viaAdmin: true,
+      user: e.MAIL_USER || "", from: e.MAIL_FROM || e.MAIL_USER || "",
+      allowTo: [], allowAll: true, // 管理画面で設定した場合は、お客様・店舗の全員に送る
+    };
+  }
   if (e.MAIL_USER && e.MAIL_PASS) {
     return {
       enabled: true,
@@ -220,9 +228,30 @@ function describeSendError(err, cfg) {
   if (!cfg.relayUrl && (codes.some((c) => /ETIMEDOUT|ECONNREFUSED|ENETUNREACH|EHOSTUNREACH|ECONNRESET/.test(c)) || !msg)) {
     return `メールサーバー（${cfg.host}:${cfg.port || 465}）に接続できませんでした（${codes.join(",") || "接続エラー"}）。` +
       "ホスティング（Renderの無料プランなど）がメール送信用の通信を止めている可能性があります。" +
-      "Googleの送信中継（MAIL_RELAY_URL・MAIL_RELAY_SECRET）を設定すると送信できます";
+      "管理画面の「店舗情報 → メール送信設定」でGoogleの送信中継を登録すると送信できます";
   }
   return (msg || codes.join(",") || "原因不明のエラー").slice(0, 300);
+}
+
+function relayScript(secret) {
+  return [
+    "// CN Ueno 予約システムのメール送信中継（このGoogleアカウントのGmailから送ります）",
+    `const SECRET = "${secret}";`,
+    "",
+    "function doPost(e) {",
+    "  try {",
+    "    const p = JSON.parse(e.postData.contents);",
+    "    if (!p || p.secret !== SECRET) return out_({ ok: false, error: \"forbidden\" });",
+    "    MailApp.sendEmail({ to: p.to, subject: p.subject, body: p.text || \"\", htmlBody: p.html || undefined, name: p.fromName || \"\" });",
+    "    return out_({ ok: true, remaining: MailApp.getRemainingDailyQuota() });",
+    "  } catch (err) {",
+    "    return out_({ ok: false, error: String(err && err.message || err) });",
+    "  }",
+    "}",
+    "function doGet() { return out_({ ok: true, service: \"cn-salon mail relay\", remaining: MailApp.getRemainingDailyQuota() }); }",
+    "function out_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }",
+    "",
+  ].join("\n");
 }
 
 // Googleの送信中継（Google Apps Script のウェブアプリ）へ https で送る。
@@ -539,6 +568,8 @@ const state = {
   memberFails: new Map(),    // email -> {n, until}（連続失敗によるロック）
   // パスワード再設定用URLの合言葉（保存するのはハッシュだけ。60分で失効・1回使ったら無効）
   memberResets: new Map(),   // sha256(token) -> {email, created, exp, used}
+  // メール送信中継（Google Apps Script）。管理画面の「メール送信設定」で登録する（Renderの設定は不要）
+  mailRelay: { url: "", secret: "" },
 };
 
 // ---- 永続化（persist.js＝このシステムのデータベース層） ----
@@ -2626,6 +2657,7 @@ function handleDemoApi(req, res, url) {
       if (P === "/api/demo/settings" && isGet) need = null;               // 未ログインには freeMessage のみ返す（下で制限）
       else if ((P === "/api/demo/course-photo" || P === "/api/demo/staff-photo") && isGet) need = null; // 公開画像
       else if (P === "/api/demo/accounts") need = "admin";                // アカウント管理は管理者のみ
+      else if (P === "/api/demo/mail-relay") need = "manager";            // メール送信設定はマネージャー以上
       else if (P === "/api/demo/report" || P === "/api/demo/mailtest") need = "manager";
       else if (!isGet && (P === "/api/demo/settings" || P === "/api/demo/ticket-plans" ||
         P === "/api/demo/courses" || P === "/api/demo/tickets" ||
@@ -2656,7 +2688,49 @@ function handleDemoApi(req, res, url) {
     return true;
   }
 
-  // ログイン中のアカウント情報（自分のもののみ。UIの表示出し分けに使う）
+  // ---- メール送信設定（Googleの送信中継） ----
+  if (url.pathname === "/api/demo/mail-relay") {
+    if (!state.mailRelay || typeof state.mailRelay !== "object") state.mailRelay = { url: "", secret: "" };
+    if (!state.mailRelay.secret) state.mailRelay.secret = crypto.randomBytes(18).toString("base64url");
+    const status = () => {
+      const cfg = loadMailConfig();
+      const failed = state.mails.filter((m) => m.status === "failed").slice(-1)[0];
+      return {
+        url: state.mailRelay.url, secret: state.mailRelay.secret, script: relayScript(state.mailRelay.secret),
+        via: !cfg ? "none" : cfg.relayUrl ? (cfg.viaAdmin ? "relay-admin" : "relay-env") : "smtp",
+        storeMail: storeMail(), lastError: failed ? failed.error : null,
+        lastRealSent: (state.mails.filter((m) => m.real).slice(-1)[0] || {}).sentAt || null,
+      };
+    };
+    if (req.method === "GET" || req.method === "HEAD") {
+      res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+      res.end(req.method === "HEAD" ? undefined : JSON.stringify(status()));
+      return true;
+    }
+    if (req.method === "POST") {
+      readJson(req, res, 1e4, (b) => {
+        if (b.action === "clear") {
+          state.mailRelay.url = "";
+          res.writeHead(200, { "Content-Type": "application/json" });
+          return res.end(JSON.stringify({ ok: true, ...status() }));
+        }
+        const u = String(b.url || "").trim();
+        if (!/^https:\/\/\S+$/.test(u)) throw err(400, "badUrl");
+        state.mailRelay.url = u;
+        // 登録したらすぐテスト送信（店舗のメールアドレス宛て。届けば設定完了）
+        const to = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(b.testTo || "")) ? String(b.testTo) : storeMail();
+        const body = ["メール送信のテストです。", "", "このメールが届いていれば、予約システムからのメール（予約確認・リマインド・店舗への通知）が送れる状態です。",
+          "", `送信日時：${JST_DT(Date.now())}`].join("\n");
+        relaySend({ relayUrl: u, relaySecret: state.mailRelay.secret }, { to, subject: `${MAIL_STORE} メール送信テスト`, body, html: mailHtml(body) }, (e2) => {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true, test: e2 ? { ok: false, to, error: e2.message } : { ok: true, to }, ...status() }));
+        });
+      });
+      return true;
+    }
+    res.writeHead(405); res.end(); return true;
+  }
+
   // 最近入った予約（すべての日付から、受付の新しい順）。管理画面の「新しい予約」通知に使う
   if (url.pathname === "/api/demo/recent-bookings" && (req.method === "GET" || req.method === "HEAD")) {
     const since = Date.now() - 14 * 86400e3;
@@ -2675,6 +2749,7 @@ function handleDemoApi(req, res, url) {
     return true;
   }
 
+  // ログイン中のアカウント情報（自分のもののみ。UIの表示出し分けに使う）
   if (url.pathname === "/api/demo/whoami" && (req.method === "GET" || req.method === "HEAD")) {
     const a = sessionAccount(req);
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });

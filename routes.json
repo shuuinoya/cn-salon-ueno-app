@@ -334,6 +334,11 @@
     "contentType": "text/html; charset=utf-8",
     "file": "pages/pm-mails.html"
   },
+  "/admin/mail-setup": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/pm-mail-setup.html"
+  },
   "/admin/hotpepper": {
     "status": 200,
     "contentType": "text/html; charset=utf-8",

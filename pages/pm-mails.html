@@ -154,6 +154,7 @@
   <header>
     <b>メール管理</b>
     <a href="/admin">← 予約台帳へ戻る</a>
+    <a href="/admin/mail-setup">メール送信設定</a>
     <a href="/" target="_blank">予約サイトを開く</a>
   </header>
   <p class="note" id="deliveryNote">送信設定を確認しています…</p>
@@ -271,8 +272,12 @@
       if (!dv.configured) {
         note.className = "note warn";
         note.innerHTML = "<b>⚠ メール送信の設定がないため、お客様・店舗のどちらにもメールは実際には届いていません。</b><br>" +
-          "ここには送る予定だった内容が「記録のみ」として残っています。Render の Environment に <code>MAIL_USER</code>（送信元のGmail）・<code>MAIL_PASS</code>（Gmailのアプリパスワード）・<code>MAIL_SEND_TO_ALL=1</code> を設定すると、実際に送信されるようになります。" +
+          "ここには送る予定だった内容が「記録のみ」として残っています。<a href=\"/admin/mail-setup\">メール送信設定</a> の手順で設定すると、実際に送信されるようになります。" +
           "<br>店舗宛ての通知先：" + esc(dv.storeMail || "") + "（店舗情報のメールアドレス）";
+      } else if (dv.via === "smtp" && mails.some((m) => m.status === "failed" && /接続できませんでした/.test(m.error || ""))) {
+        note.className = "note warn";
+        note.innerHTML = "<b>⚠ メールの送信に失敗しています（お客様・店舗のどちらにも届いていません）。</b><br>" +
+          "Render の無料プランは Gmail への直接送信を止めています。<a href=\"/admin/mail-setup\">メール送信設定</a> の手順（約10分・無料）で、Googleの送信中継を登録してください。";
       } else if (!dv.allowAll) {
         note.className = "note warn";
         note.innerHTML = "<b>⚠ テスト用の設定です。許可した宛先（" + (dv.allowTo || 0) + "件）にだけ実際に送信し、お客様には届きません。</b><br>" +
