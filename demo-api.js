@@ -183,7 +183,8 @@ function loadMailConfig() {
   const e = process.env;
   // Render の無料プラン等は送信用ポート（SMTP）を外部に出せないため、https で送れる
   // Google Apps Script の送信中継（MAIL_RELAY_URL＋MAIL_RELAY_SECRET）を優先して使う
-  if (e.MAIL_RELAY_URL && e.MAIL_RELAY_SECRET) {
+  // URLが正しく入っていない（説明文のまま等）ときは中継を使わず、下のGmail直接送信（SMTP）に戻る
+  if (/^https:\/\/\S+$/.test(String(e.MAIL_RELAY_URL || "").trim()) && e.MAIL_RELAY_SECRET) {
     return {
       enabled: true, relayUrl: e.MAIL_RELAY_URL, relaySecret: e.MAIL_RELAY_SECRET,
       user: e.MAIL_USER || "", from: e.MAIL_FROM || e.MAIL_USER || "",
