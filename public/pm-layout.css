@@ -1834,3 +1834,11 @@ main.ledger-app .ledger-row > .ledger-staff-cell { position: sticky; left: 0; }
 #pm-ticket-modal .pm-tk-mails th, #pm-ticket-modal .pm-tk-mails td { border: 1px solid #eee3d5; padding: 5px 7px; text-align: left; vertical-align: top; }
 #pm-ticket-modal .pm-tk-mails th { background: #faf6f0; color: #6b4f2a; font-weight: 600; }
 #pm-ticket-modal .pm-tk-mailrow > td { background: #fdfaf6; overflow-x: auto; }
+
+/* 新しい予約の通知（実際に入った予約の来店日時・お名前。押すとその日の台帳へ） */
+#pm-toast { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; cursor: default; padding: 12px 34px 12px 16px; max-width: min(380px, calc(100vw - 24px)); }
+#pm-toast b { font-weight: 700; }
+#pm-toast .pm-toast-bk { all: unset; cursor: pointer; text-decoration: underline; line-height: 1.6; font-size: 13px; }
+#pm-toast .pm-toast-bk:hover { opacity: 0.85; }
+#pm-toast small { font-size: 11px; opacity: 0.85; }
+#pm-toast .pm-toast-x { all: unset; position: absolute; top: 4px; right: 8px; cursor: pointer; font-size: 18px; line-height: 1; padding: 4px; }

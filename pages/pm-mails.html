@@ -97,6 +97,8 @@
   .status-pending { color: #b06a00; font-weight: 700; }
   .status-sending { color: #2a6fb0; font-weight: 700; }
   .status-accepted { color: #3f9b45; font-weight: 700; }
+  .note.warn { background: #fdecea; border-color: #e4a29b; color: #8a2a20; line-height: 1.7; }
+  .note code { background: rgb(0 0 0 / 0.06); padding: 0 4px; border-radius: 3px; }
   .status-failed { color: #c0392b; font-weight: 700; }
   .status-skipped { color: #7a7a7a; font-weight: 700; }
   .b-ticket { background: #b07cc6; }
@@ -150,11 +152,11 @@
 </head>
 <body>
   <header>
-    <b>メール管理（デモ）</b>
+    <b>メール管理</b>
     <a href="/admin">← 予約台帳へ戻る</a>
     <a href="/" target="_blank">予約サイトを開く</a>
   </header>
-  <p class="note">操作デモ・架空データのみ／メールは実際には送信されず、ここで内容と送信状態（送信予定→送信処理中→送信済み／送信失敗）を確認できます。リマインドは「お客様＝来店24時間前」「店舗＝当日朝9時」に送信されます。</p>
+  <p class="note" id="deliveryNote">送信設定を確認しています…</p>
   <div class="tabs">
     <button data-f="all" class="on">すべて</button>
     <button data-f="customer">お客様宛</button>
@@ -205,7 +207,9 @@
     list.innerHTML = rows.map((m) => {
       const [label, cls] = TYPE[m.type] || [m.type, "b-notify"];
       const stat = m.status === "sent"
-        ? '<span class="status-accepted">送信済み（デモ）</span> ' + fmt(m.sentAt || m.scheduledAt)
+        ? (m.real
+          ? '<span class="status-accepted">送信済み</span> ' + fmt(m.sentAt || m.scheduledAt)
+          : '<span class="status-skipped">記録のみ（実際には届いていません）</span> ' + fmt(m.sentAt || m.scheduledAt))
         : m.status === "failed"
         ? '<span class="status-failed">送信失敗</span> ' + fmt(m.scheduledAt)
         : m.status === "skipped"
@@ -259,7 +263,24 @@
   async function load() {
     try {
       const r = await fetch("/api/demo/mails", { cache: "no-store" });
-      mails = (await r.json()).mails || [];
+      const j = await r.json();
+      mails = j.mails || [];
+      // 送信設定の状態：未設定なら、お客様にも店舗にもメールが届いていないことをはっきり示す
+      const dv = j.delivery || {};
+      const note = document.getElementById("deliveryNote");
+      if (!dv.configured) {
+        note.className = "note warn";
+        note.innerHTML = "<b>⚠ メール送信の設定がないため、お客様・店舗のどちらにもメールは実際には届いていません。</b><br>" +
+          "ここには送る予定だった内容が「記録のみ」として残っています。Render の Environment に <code>MAIL_USER</code>（送信元のGmail）・<code>MAIL_PASS</code>（Gmailのアプリパスワード）・<code>MAIL_SEND_TO_ALL=1</code> を設定すると、実際に送信されるようになります。" +
+          "<br>店舗宛ての通知先：" + esc(dv.storeMail || "") + "（店舗情報のメールアドレス）";
+      } else if (!dv.allowAll) {
+        note.className = "note warn";
+        note.innerHTML = "<b>⚠ テスト用の設定です。許可した宛先（" + (dv.allowTo || 0) + "件）にだけ実際に送信し、お客様には届きません。</b><br>" +
+          "お客様にも送るには Render の Environment に <code>MAIL_SEND_TO_ALL=1</code> を設定してください。店舗宛ての通知先：" + esc(dv.storeMail || "");
+      } else {
+        note.className = "note";
+        note.innerHTML = "メールは実際に送信されています。送信状態（送信予定→送信処理中→送信済み／送信失敗）を確認できます。リマインドは「お客様＝来店24時間前」「店舗＝当日朝9時」に送信されます。店舗宛ての通知先：" + esc(dv.storeMail || "");
+      }
       render();
     } catch {}
   }

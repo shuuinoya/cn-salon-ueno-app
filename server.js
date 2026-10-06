@@ -63,6 +63,28 @@ function routeKey(url) {
   return url.pathname;
 }
 
+// 日時選択ページの見出し（7日分）を、ブラウザ側と同じ規則で作る：
+// 開始日＝URLの date（今日〜84日後の範囲なら）／それ以外は今日。今日は日本時間で朝3時に切り替わる。
+// 日曜は sunday-column、土曜は saturday-column、今日の列に aria-current="date"
+function fixDateHeaders(text, url) {
+  const day = (ms) => new Date(ms + 9 * 3600e3).toISOString().slice(0, 10);
+  const add = (d, n) => new Date(Date.parse(d + "T00:00:00Z") + n * 86400e3).toISOString().slice(0, 10);
+  const today = day(Date.now() - 3 * 3600e3);
+  const q = url.searchParams.get("date") || "";
+  const start = /^\d{4}-\d{2}-\d{2}$/.test(q) && !Number.isNaN(Date.parse(q)) && q >= today && q <= add(today, 84) ? q : today;
+  const WD = ["日", "月", "火", "水", "木", "金", "土"];
+  let cols = "";
+  for (let i = 0; i < 7; i++) {
+    const t = add(start, i);
+    const w = new Date(t + "T00:00:00Z").getUTCDay();
+    const cls = w === 0 ? "sunday-column" : w === 6 ? "saturday-column" : "";
+    cols += `<th scope="col" class="${cls}"${t === today ? ' aria-current="date"' : ""}>${Number(t.slice(5, 7))}/${Number(t.slice(8))}<small>${WD[w]}</small></th>`;
+  }
+  return text.replace(
+    /(<th scope="col" class="time-column">[\s\S]*?<\/th>)(?:<th scope="col" class="[^"]*"(?: aria-current="date")?>\d{1,2}\/\d{1,2}<small>[^<]*<\/small><\/th>){7}/,
+    (_, timeCol) => timeCol + cols);
+}
+
 function sendFile(res, file, status, type, head, url, req) {
   fs.readFile(file, (err, data) => {
     if (err) return send404(res, head);
@@ -101,6 +123,10 @@ function sendFile(res, file, status, type, head, url, req) {
           /nav:\{"pathname":"[^"]*","searchParams":\[(?:\[[^\]]*\],?)*\]\}/,
           "nav:" + nav
         );
+        // 日時選択ページ：保存HTMLの空き状況表の見出し（日付・曜日）は保存した日（9/24〜）のまま。
+        // ブラウザ側は「今日（3時切替）から7日分」を描くため食い違い、Reactがエラー（#418）を出して
+        // 画面を描き直していた。ブラウザと同じ計算で、見出しを今日からの7日分に書き換えて返す
+        if (url.pathname === "/book/select-datetime") text = fixDateHeaders(text, url);
         // 予約サイトの全ページに、会員ログイン（右上ボタン→ログインモーダル）のスクリプトを差し込む
         // （管理画面には入れない。?v=更新時刻 を付けて、ブラウザに古いキャッシュを使わせない）
         if (brandFor(file, url) === BOOKING_BRAND && !file.includes("pm-login") && !file.includes("admin")) {

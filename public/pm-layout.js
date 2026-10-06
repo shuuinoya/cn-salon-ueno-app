@@ -95,6 +95,73 @@
   }).observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener("resize", clampDatePopover);
 
+  // ---- 新しい予約の通知 ----
+  // 端末ごとに「どこまで見たか」を覚え、それより後に入った予約サイト・ホットペッパーの予約を知らせる。
+  // 初めて開いた端末では、直近24時間の予約を知らせる。20秒ごとに確認（台帳を開いたままでも届く）
+  const WDJ = ["日", "月", "火", "水", "木", "金", "土"];
+  function watchNewBookings() {
+    const KEY = "pm-seen-booking-at";
+    let seen = 0;
+    try { seen = Number(localStorage.getItem(KEY)) || 0; } catch {}
+    if (!seen) seen = Date.now() - 24 * 3600e3;
+    const shown = new Map(); // 通知中の予約
+    const check = async () => {
+      try {
+        const r = await origFetch("/api/demo/recent-bookings", { cache: "no-store" });
+        if (!r.ok) return;
+        const j = await r.json();
+        const fresh = (j.bookings || []).filter((b) => b.created > seen && b.source !== "admin" && b.status === "confirmed");
+        if (!fresh.length) return;
+        for (const b of fresh) shown.set(b.id, b);
+        seen = Math.max(seen, ...fresh.map((b) => b.created));
+        try { localStorage.setItem(KEY, String(seen)); } catch {}
+        renderNewBookingToast([...shown.values()].sort((a, b) => b.created - a.created), () => shown.clear());
+      } catch {}
+    };
+    setTimeout(check, 1500);
+    setInterval(check, 20000);
+  }
+  function renderNewBookingToast(list, onClose) {
+    document.getElementById("pm-toast")?.remove();
+    const t = document.createElement("div");
+    t.id = "pm-toast";
+    t.setAttribute("role", "status");
+    const fmt = (b) => {
+      const s = new Date(b.start + 9 * 3600e3), d = b.date;
+      return `${Number(d.slice(5, 7))}/${Number(d.slice(8))}（${WDJ[new Date(d + "T00:00:00Z").getUTCDay()]}）` +
+        `${String(s.getUTCHours()).padStart(2, "0")}:${String(s.getUTCMinutes()).padStart(2, "0")}〜 ${b.name} 様`;
+    };
+    const esc = (x) => String(x).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    t.innerHTML = `<button type="button" class="pm-toast-x" aria-label="閉じる">×</button>` +
+      `<b>${list.length > 1 ? `オンライン予約が${list.length}件入りました。` : "オンライン予約が入りました。"}</b>` +
+      list.slice(0, 5).map((b) => `<button type="button" class="pm-toast-bk" data-date="${esc(b.date)}" title="${esc(b.course)}">${esc(fmt(b))}${b.source === "hotpepper" ? "（ホットペッパー）" : ""}</button>`).join("") +
+      (list.length > 5 ? `<small>ほか${list.length - 5}件</small>` : "") +
+      `<small>押すとその日の台帳を開きます</small>`;
+    t.addEventListener("click", (e) => {
+      const x = e.target.closest(".pm-toast-x");
+      const bk = e.target.closest(".pm-toast-bk");
+      if (x) { t.remove(); onClose(); return; }
+      if (bk) { t.remove(); onClose(); goToLedgerDate(bk.dataset.date); }
+    });
+    document.body.appendChild(t);
+  }
+  // 予約台帳の表示日を指定の日付に移す（台帳の「前日・翌日」ボタンを必要な回数だけ押す）
+  async function goToLedgerDate(date) {
+    const cur = () => document.querySelector(".ledger-date-trigger time")?.getAttribute("datetime");
+    if (!cur()) {
+      // スタッフ情報などの別画面にいる場合は、先に日別予約台帳へ戻す
+      [...document.querySelectorAll(".ledger-nav-menu > div button")].find((b) => b.textContent === "日別予約台帳")?.click();
+      await new Promise((r) => setTimeout(r, 600));
+    }
+    for (let i = 0; i < 120 && cur() && cur() !== date; i++) {
+      const before = cur();
+      const arrows = document.querySelectorAll(".ledger-toolbar > .ledger-day-arrow");
+      if (arrows.length < 2) return;
+      (date > before ? arrows[arrows.length - 1] : arrows[0]).click();
+      for (let w = 0; w < 40 && cur() === before; w++) await new Promise((r) => setTimeout(r, 50));
+    }
+  }
+
   function ensure() {
     const app = document.querySelector(".ledger-app");
     if (!app) return;
@@ -170,23 +237,10 @@
       }
     }
 
-    // 3c) 青い「オンライン予約が入りました」トースト（本物と同じ表示）
-    if (!window.__pmToastTimer) {
-      window.__pmToastTimer = setTimeout(() => {
-        if (document.getElementById("pm-toast")) return;
-        const now = new Date(Date.now() + 9 * 3600e3); // 日本時間
-        const later = new Date(now.getTime() + 90 * 60e3);
-        const hh = String(later.getUTCHours()).padStart(2, "0");
-        const mm = String(Math.floor(later.getUTCMinutes() / 10) * 10).padStart(2, "0");
-        const t = document.createElement("div");
-        t.id = "pm-toast";
-        t.innerHTML = "オンライン予約が入りました。<br/>" +
-          now.toISOString().slice(0, 10) + " " + hh + ":" + mm + " 新予約";
-        t.title = "クリックで閉じる";
-        t.addEventListener("click", () => t.remove());
-        document.body.appendChild(t);
-      }, 4000);
-    }
+    // 3c) 青い「オンライン予約が入りました」通知：予約サイト・ホットペッパーから実際に入った
+    //     新しい予約だけを、来店日時・お名前つきで知らせる（押すとその日の台帳へ移動）。
+    //     以前は実在しない予約を毎回表示していたため廃止
+    if (!window.__pmNewBk) { window.__pmNewBk = true; watchNewBookings(); }
 
     // 3a1) 左上のロゴを本物と同じ「白い花びらマーク」にする
     decorateLogo();
@@ -2039,7 +2093,7 @@
           "<tr><td>" + dt(m.sentAt || m.renderedAt || m.scheduledAt) + "</td>" +
           "<td>" + esc((TYPE[m.type] || m.type) + (m.kind === "store" ? "（店舗宛）" : "")) + "</td>" +
           "<td>" + esc(m.to) + "</td>" +
-          "<td>" + esc(ST[m.status] || m.status) + (m.error ? "<br><small>" + esc(m.error) + "</small>" : "") + (m.skipReason ? "<br><small>" + esc(m.skipReason) + "</small>" : "") + "</td>" +
+          "<td>" + esc(m.status === "sent" && !m.real ? "記録のみ（届いていません）" : ST[m.status] || m.status) + (m.error ? "<br><small>" + esc(m.error) + "</small>" : "") + (m.skipReason ? "<br><small>" + esc(m.skipReason) + "</small>" : "") + "</td>" +
           "<td>" + (m.snap ? m.snap.usesLeft + "回／" + m.snap.usesTotal + "回" : (m.status === "pending" ? "送信時に確定" : "-")) + "</td>" +
           "<td>" + (m.snap ? esc(m.snap.expiresLabel) : "-") + "</td>" +
           "<td>" + (m.match === true ? "一致" : m.match === false ? '<b style="color:#c0392b">不一致（台帳 残り' + m.ledger.usesLeft + "回）</b>" : "-") + "</td></tr>").join("") +

@@ -96,6 +96,12 @@ function maskEmail(e) {
   const [u, d] = String(e).split("@");
   return (u.length <= 2 ? u[0] + "*" : u.slice(0, 2) + "*".repeat(Math.min(6, u.length - 2))) + "@" + d;
 }
+// 予約を受け付けた日時（以前の予約は「2026-10-06 14:55 WEB」形式の表示用ラベルから求める）
+function bookingCreatedAt(b) {
+  if (Number.isFinite(b.created_at)) return b.created_at;
+  const m = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})/.exec(String(b.created_label || ""));
+  return m ? Date.parse(m[1] + "T" + m[2] + ":00+09:00") : 0;
+}
 function memberPublic(m) {
   return { email: m.email, name: m.name || "", phone: m.phone || "", createdAt: m.createdAt };
 }
@@ -539,6 +545,9 @@ const persistReady = (() => {
         if (m.tpl && m.tpl.name === "booking") continue;
         m.tpl = { name: "booking", variant: m.kind === "store" ? "storeRemind" : "customerRemind", bookingId: m.bookingId };
       }
+      for (const m of state.mails || []) {
+        if (m.kind === "store" && m.status === "pending" && m.to === "info@cn-salon-ueno.example.jp") m.to = storeMail();
+      }
       // 期限リマインドの重複防止キーを「送った有効期限」に移行（従来の送信済みフラグを引き継ぐ）
       for (const t of state.tickets.values()) {
         if (t.remind_sent && t.remind_for_expiry === undefined) t.remind_for_expiry = t.expires_at;
@@ -792,7 +801,7 @@ function postSchedule(body) {
       if (cbOthers.length < n - 1) throw err(409, "soldOut");
       ev.bookings.push({
         id, reference: "DM" + String(state.bookingSerial).padStart(6, "0"),
-        service_date: date, status: "confirmed",
+        service_date: date, status: "confirmed", created_at: Date.now(), source: "admin",
         start_at: minToMs(date, start), end_at: minToMs(date, end),
         people: n, course, course_name: c.name,
         name: String(body.name || "（店頭受付）"), email: String(body.email || ""), phone: String(body.phone || ""),
@@ -949,8 +958,12 @@ function postSchedule(body) {
 // ---- リマインド・通知メール（デモ：実送信はせず、内容を生成して保存する） ----
 
 const STORE_NAME = "CN Ueno health & beauty";
-// 店舗宛て通知（新規予約・取消・当日リマインド）の宛先。本番は環境変数 STORE_MAIL で実在のアドレスにする
-const STORE_MAIL = process.env.STORE_MAIL || "info@cn-salon-ueno.example.jp";
+// 店舗宛て通知（新規予約・取消・当日リマインド）の宛先：環境変数 STORE_MAIL があればそれ、
+// 無ければ管理画面の「店舗情報」に登録したメールアドレス（以前は届かない仮のアドレスだった）
+const storeMail = () => {
+  const e = String(process.env.STORE_MAIL || state.settings.shopMaster.email || "").trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) ? e : "info@cn-salon-ueno.example.jp";
+};
 
 function fmtDateJa(date) {
   const w = ["日", "月", "火", "水", "木", "金", "土"][new Date(date + "T00:00:00Z").getUTCDay()];
@@ -1097,6 +1110,13 @@ function deliverDueMails() {
     mailSecrets.delete(m.id);
     m.status = "sent";
     m.sentAt = now;
+    // 実際には配信していない（記録のみ）。メール管理・回数券の記録で「届いていない」と分かるようにする
+    m.simulated = true;
+    m.simReason = !loadMailConfig()
+      ? "メール送信の設定がないため、実際には送信していません（記録のみ）"
+      : RESERVED_MAIL_DOMAIN.test(String(m.to || ""))
+        ? "テスト用・仮のアドレスのため、実際には送信していません（記録のみ）"
+        : "送信先が許可リストに無いため、実際には送信していません（記録のみ）";
   }
   // 送信待ちでなくなったメール（宛先不正などで失敗したもの）の秘密の値も、メモリから消す
   for (const id of [...mailSecrets.keys()]) {
@@ -1451,7 +1471,7 @@ function ticketMailLog(t) {
       match = ledger.usesLeft === snap.usesLeft && (ledger.expiresAt === null || ledger.expiresAt === snap.expiresAt);
     }
     return {
-      id: m.id, type: m.type, kind: m.kind, to: m.to, subject: m.subject, status: m.status,
+      id: m.id, type: m.type, kind: m.kind, to: m.to, subject: m.subject, status: m.status, real: !!m.real,
       scheduledAt: m.scheduledAt, sentAt: m.sentAt, renderedAt: m.renderedAt || null,
       error: m.error || null, skipReason: m.skipReason || null, snap, ledger, match,
     };
@@ -1816,8 +1836,8 @@ function queueBookingMails(bk) {
     queueBookingMail("customer", "confirm", bk.email, "customerConfirm", bk, now);
     queueBookingMail("customer", "remind", bk.email, "customerRemind", bk, Math.max(now, bk.start_at - 24 * 3600e3));
   }
-  queueBookingMail("store", "notify", STORE_MAIL, "storeNotify", bk, now);
-  queueBookingMail("store", "remind", STORE_MAIL, "storeRemind", bk, Math.max(now, dayStartMs(bk.service_date) + 9 * 3600e3));
+  queueBookingMail("store", "notify", storeMail(), "storeNotify", bk, now);
+  queueBookingMail("store", "remind", storeMail(), "storeRemind", bk, Math.max(now, dayStartMs(bk.service_date) + 9 * 3600e3));
   deliverDueMails();
 }
 
@@ -1835,8 +1855,8 @@ function queueChangeMails(bk) {
     queueBookingMail("customer", "change", bk.email, "customerChange", bk, now);
     queueBookingMail("customer", "remind", bk.email, "customerChangeRemind", bk, Math.max(now, bk.start_at - 24 * 3600e3));
   }
-  queueBookingMail("store", "change", STORE_MAIL, "storeChange", bk, now);
-  queueBookingMail("store", "remind", STORE_MAIL, "storeChangeRemind", bk, Math.max(now, dayStartMs(bk.service_date) + 9 * 3600e3));
+  queueBookingMail("store", "change", storeMail(), "storeChange", bk, now);
+  queueBookingMail("store", "remind", storeMail(), "storeChangeRemind", bk, Math.max(now, dayStartMs(bk.service_date) + 9 * 3600e3));
   deliverDueMails();
 }
 
@@ -1844,7 +1864,7 @@ function queueCancelMails(bk) {
   dropPendingReminders(bk.id);
   const now = Date.now();
   if (bk.email) queueBookingMail("customer", "cancel", bk.email, "customerCancel", bk, now);
-  queueBookingMail("store", "cancel", STORE_MAIL, "storeCancel", bk, now);
+  queueBookingMail("store", "cancel", storeMail(), "storeCancel", bk, now);
   deliverDueMails();
 }
 
@@ -1997,7 +2017,7 @@ function hpNotify(b, via) {
   const id = "hp-" + state.bookingSerial;
   const ev = ensureEvents(date);
   ev.bookings.push({
-    id, reference: rid, service_date: date, status: "confirmed",
+    id, reference: rid, service_date: date, status: "confirmed", created_at: Date.now(), source: "hotpepper",
     start_at: minToMs(date, start), end_at: minToMs(date, end),
     people: 1, course: course ? course.id : "", course_name: menu, course_label: menu,
     name, email: String(b.email || ""), phone: String(b.phone || ""),
@@ -2334,7 +2354,7 @@ function createPublicBooking(body, member) {
   const ev = ensureEvents(date);
   ev.bookings.push({
     id, reference,
-    service_date: date, status: "confirmed",
+    service_date: date, status: "confirmed", created_at: Date.now(), source: "web",
     start_at: minToMs(date, m), end_at: minToMs(date, m + dur),
     people, course: body.course, course_name: course.name,
     name: String(body.name).slice(0, 120), email: String(body.email).slice(0, 254),
@@ -2413,7 +2433,8 @@ function getPublicBooking(id, token, member) {
     },
     notifications: (deliverDueMails(), state.mails)
       .filter((m) => m.bookingId === bk.id && (m.type === "confirm" || m.type === "notify"))
-      .map((m) => ({ kind: m.kind, status: m.status === "sent" ? "accepted" : m.status === "failed" ? "failed" : "pending" })),
+      // 実際に配信できたときだけ「送信を受け付けました」。記録だけのときは「送信待ち（予約番号をお控えください）」
+      .map((m) => ({ kind: m.kind, status: m.status === "sent" && m.real ? "accepted" : m.status === "failed" ? "failed" : "pending" })),
   };
 }
 
@@ -2591,6 +2612,24 @@ function handleDemoApi(req, res, url) {
   }
 
   // ログイン中のアカウント情報（自分のもののみ。UIの表示出し分けに使う）
+  // 最近入った予約（すべての日付から、受付の新しい順）。管理画面の「新しい予約」通知に使う
+  if (url.pathname === "/api/demo/recent-bookings" && (req.method === "GET" || req.method === "HEAD")) {
+    const since = Date.now() - 14 * 86400e3;
+    const list = [];
+    for (const [d, ev] of state.events) {
+      for (const b of ev.bookings) {
+        const created = bookingCreatedAt(b);
+        if (!created || created < since) continue;
+        list.push({ id: b.id, date: d, start: b.start_at, end: b.end_at, name: b.name, course: b.course_name, people: b.people || 1,
+          status: b.status, created, source: b.source || (String(b.id).startsWith("web-") ? "web" : String(b.id).startsWith("hp-") ? "hotpepper" : "admin") });
+      }
+    }
+    list.sort((a, b) => b.created - a.created);
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    res.end(req.method === "HEAD" ? undefined : JSON.stringify({ now: Date.now(), bookings: list.slice(0, 50) }));
+    return true;
+  }
+
   if (url.pathname === "/api/demo/whoami" && (req.method === "GET" || req.method === "HEAD")) {
     const a = sessionAccount(req);
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
@@ -3001,8 +3040,10 @@ function handleDemoApi(req, res, url) {
   if (url.pathname === "/api/demo/mails" && (req.method === "GET" || req.method === "HEAD")) {
     deliverDueMails();
     const mails = [...state.mails].sort((a, b) => b.createdAt - a.createdAt);
+    const cfg = loadMailConfig();
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
-    res.end(req.method === "HEAD" ? undefined : JSON.stringify({ mails }));
+    res.end(req.method === "HEAD" ? undefined : JSON.stringify({ mails,
+      delivery: { configured: !!cfg, allowAll: !!(cfg && cfg.allowAll), allowTo: cfg ? cfg.allowTo.length : 0, storeMail: storeMail() } }));
     return true;
   }
 
