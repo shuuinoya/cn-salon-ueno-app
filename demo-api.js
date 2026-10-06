@@ -1722,7 +1722,7 @@ const MAIL_COMMON = [
   "ご返信いただいても返信内容の確認およびご返答ができませんのでご了承ください。",
   "",
   "■このメールにお心当たりがない場合には、お手数ですが、システムサポートまでお知らせください。",
-  "システムサポート：pm-support@epark-r.jp",
+  "システムサポート：cnsalon2021@gmail.com",
   SEP,
   MAIL_STORE,
   MAIL_ADDR,
