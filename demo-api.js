@@ -181,6 +181,16 @@ function loadMailConfig() {
     if (c && c.enabled && c.host && c.user && Array.isArray(c.allowTo)) return c;
   } catch {}
   const e = process.env;
+  // Render の無料プラン等は送信用ポート（SMTP）を外部に出せないため、https で送れる
+  // Google Apps Script の送信中継（MAIL_RELAY_URL＋MAIL_RELAY_SECRET）を優先して使う
+  if (e.MAIL_RELAY_URL && e.MAIL_RELAY_SECRET) {
+    return {
+      enabled: true, relayUrl: e.MAIL_RELAY_URL, relaySecret: e.MAIL_RELAY_SECRET,
+      user: e.MAIL_USER || "", from: e.MAIL_FROM || e.MAIL_USER || "",
+      allowTo: String(e.MAIL_ALLOW_TO || "").split(",").map((s) => s.trim()).filter(Boolean),
+      allowAll: e.MAIL_SEND_TO_ALL === "1",
+    };
+  }
   if (e.MAIL_USER && e.MAIL_PASS) {
     return {
       enabled: true,
@@ -201,6 +211,37 @@ const realSendAllowed = (to) => {
   if (!c || RESERVED_MAIL_DOMAIN.test(String(to || ""))) return null;
   return (c.allowAll || c.allowTo.includes(to)) ? c : null;
 };
+
+// 送信失敗の理由を、管理画面で読んで分かる文にする（接続できない場合は空のメッセージになるため）
+function describeSendError(err, cfg) {
+  const codes = [err && err.code, ...((err && err.errors) || []).map((x) => x && (x.code || x.message))].filter(Boolean);
+  const msg = String((err && err.message) || "").trim();
+  if (!cfg.relayUrl && (codes.some((c) => /ETIMEDOUT|ECONNREFUSED|ENETUNREACH|EHOSTUNREACH|ECONNRESET/.test(c)) || !msg)) {
+    return `メールサーバー（${cfg.host}:${cfg.port || 465}）に接続できませんでした（${codes.join(",") || "接続エラー"}）。` +
+      "ホスティング（Renderの無料プランなど）がメール送信用の通信を止めている可能性があります。" +
+      "Googleの送信中継（MAIL_RELAY_URL・MAIL_RELAY_SECRET）を設定すると送信できます";
+  }
+  return (msg || codes.join(",") || "原因不明のエラー").slice(0, 300);
+}
+
+// Googleの送信中継（Google Apps Script のウェブアプリ）へ https で送る。
+// 送信元は中継を作ったGoogleアカウントのGmail。secret が一致したときだけ中継側が送信する
+function relaySend(cfg, mail, done) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 30000);
+  fetch(cfg.relayUrl, {
+    method: "POST", redirect: "follow", signal: ctl.signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ secret: cfg.relaySecret, to: mail.to, subject: mail.subject, text: mail.body, html: mail.html, fromName: MAIL_STORE }),
+  }).then(async (r) => {
+    const t = await r.text();
+    let j = null; try { j = JSON.parse(t); } catch {}
+    if (j && j.ok) return done(null);
+    done(new Error(j && j.error ? "送信中継: " + j.error
+      : `送信中継の応答が不正です（HTTP ${r.status}）。ウェブアプリのURLと「アクセスできるユーザー：全員」を確認してください`));
+  }).catch((e) => done(new Error(e.name === "AbortError" ? "送信中継の応答がありません（30秒）" : "送信中継に接続できません: " + e.message)))
+    .finally(() => clearTimeout(timer));
+}
 
 // 最小限のSMTPクライアント（依存パッケージなし）。
 // port 465=SSL／587=STARTTLS／secure:"none"はローカル検証用の平文。
@@ -1094,11 +1135,11 @@ function deliverDueMails() {
       // パスワード等の秘密の値は、ここで送る本文にだけ入れる（記録の本文は伏せ字のまま）
       const out = withMailSecrets(m);
       mailSecrets.delete(m.id);
-      smtpSend(cfg, out, (err) => {
+      (cfg.relayUrl ? relaySend : smtpSend)(cfg, out, (err) => {
         if (m.status !== "sending") return; // 二重送信防止
         if (err) {
           m.status = "failed";
-          m.error = "実送信エラー: " + err.message;
+          m.error = "実送信エラー: " + describeSendError(err, cfg);
         } else {
           m.status = "sent";
           m.sentAt = Date.now();
@@ -3043,7 +3084,7 @@ function handleDemoApi(req, res, url) {
     const cfg = loadMailConfig();
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
     res.end(req.method === "HEAD" ? undefined : JSON.stringify({ mails,
-      delivery: { configured: !!cfg, allowAll: !!(cfg && cfg.allowAll), allowTo: cfg ? cfg.allowTo.length : 0, storeMail: storeMail() } }));
+      delivery: { configured: !!cfg, via: cfg ? (cfg.relayUrl ? "relay" : "smtp") : null, allowAll: !!(cfg && cfg.allowAll), allowTo: cfg ? cfg.allowTo.length : 0, storeMail: storeMail() } }));
     return true;
   }
 
@@ -3513,7 +3554,7 @@ function handleDemoApi(req, res, url) {
           res.end(JSON.stringify({ error: "mailConfigMissing" }));
           return;
         }
-        smtpSend(allowed, { to, subject: String(b.subject || "テスト"), body: String(b.text || "") }, (err) => {
+        (allowed.relayUrl ? relaySend : smtpSend)(allowed, { to, subject: String(b.subject || "テスト"), body: String(b.text || "") }, (err) => {
           res.writeHead(err ? 502 : 200, { "Content-Type": "application/json" });
           res.end(JSON.stringify(err ? { error: String(err.message) } : { ok: true, to }));
         });
