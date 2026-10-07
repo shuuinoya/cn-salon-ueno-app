@@ -325,19 +325,26 @@
 
   async function logout() {
     try { await fetch("/api/member/logout", { method: "POST", credentials: "same-origin" }); } catch {}
+    // このブラウザに記録した予約（メールのリンク等から開いたもの）も表示をやめる
+    try { localStorage.removeItem("cn-mypage"); } catch {}
     CNMember.me = null; CNMember.data = null;
     location.href = "/";
   }
 
   // ---- 右上の「ログイン」ボタン：未ログインならモーダル、ログイン中は「マイページ」へ ----
+  // メールのリンク等でマイページの予約をこのブラウザで見られる状態も「マイページ」にする
+  const hasMypage = () => !!CNMember.me || ls("cn-mypage").length > 0;
   document.addEventListener("click", (e) => {
     const a = e.target.closest("a.login-button");
-    if (!a || CNMember.me) return;
+    if (!a) return;
+    // 予約サイトの画面部品はボタンの元のリンク先（/login）へ移動してしまうため、ここで行き先を決める
     e.preventDefault();
-    open("login");
+    e.stopPropagation();
+    if (hasMypage()) location.href = "/mypage";
+    else open("login");
   }, true);
   function applyHeader() {
-    const me = CNMember.me;
+    const me = hasMypage();
     document.querySelectorAll("a.login-button").forEach((a) => {
       const want = me ? "mypage" : "login";
       if (a.dataset.cnState === want) return;

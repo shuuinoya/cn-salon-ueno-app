@@ -32,6 +32,7 @@
     border-bottom: 2px solid transparent;
   }
   .tabs a.active { color: #b08d4f; border-bottom-color: #b08d4f; }
+  .tabs a[hidden] { display: none; }
   main { max-width: 980px; margin: 0 auto; padding: 16px 24px 60px; }
   .card.focus { box-shadow: 0 0 0 2px #c5a15e, 0 1px 3px rgb(0 0 0 / 0.08); }
   .card {
@@ -236,13 +237,16 @@
     if (!member) {
       // 未ログインでも、予約メールのリンク（予約ID＋予約ごとの合言葉）で開いた予約だけは表示する
       // （確認・取消のみ。日時変更・回数券・会員情報はログインが必要）
+      const gone = [];
       for (const entry of store()) {
         try {
           const r = await fetch("/api/bookings?id=" + encodeURIComponent(entry.id), {
             headers: { Authorization: "Bearer " + entry.token }, cache: "no-store" });
           if (r.ok) rows.push({ entry, bk: (await r.json()).booking });
+          else if (r.status === 404) gone.push(entry.id);
         } catch {}
       }
+      if (gone.length) saveStore(store().filter((x) => !gone.includes(x.id)));
       rows.sort((a, b) => b.bk.start - a.bk.start);
       return;
     }
@@ -272,6 +276,19 @@
       "</p>" +
       '<div class="btnrow"><button type="button" class="gold" style="border:0;cursor:pointer" id="mp-login">' + (ja ? "ログイン" : "Log in") + "</button>" +
       '<button type="button" class="gold" style="border:1px solid #c5a15e;background:#fff;color:#8a6a33;cursor:pointer" id="mp-register">' + (ja ? "新規会員登録（無料）" : "Sign up (free)") + "</button></div></div>";
+  }
+
+  // マイページ下部のログアウト。会員でない（メールのリンク等で予約を見ている）ときは、
+  // 回数券を使うための会員ログイン・新規登録へ1行だけ案内する
+  function logoutFoot() {
+    const ja = pageLang !== "en";
+    const lk = 'style="background:none;border:0;padding:0;font:inherit;color:#8a6a33;text-decoration:underline;cursor:pointer"';
+    return '<div class="card"><div class="btnrow"><button type="button" class="cancel" id="mp-logout">' + (ja ? "ログアウト" : "Log out") + "</button></div>" +
+      (member ? "" : '<p class="empty" style="text-align:center;margin:12px 0 0;font-size:13px">' +
+        (ja ? "回数券のご購入・残り回数の確認は " : "To buy or check tickets: ") +
+        '<button type="button" id="mp-login" ' + lk + ">" + (ja ? "会員ログイン" : "Log in") + "</button>／" +
+        '<button type="button" id="mp-register" ' + lk + ">" + (ja ? "新規会員登録" : "Sign up") + "</button></p>") +
+      "</div>";
   }
 
   // メールの「予約のキャンセルはこちら」から開いた予約を一番上に並べる
@@ -308,13 +325,21 @@
       document.getElementById("tab-" + id).classList.toggle("active", tab === id);
     }
     const main = document.getElementById("main");
+    // メールのリンク等で予約を見ている（会員ログインなし）ときは、会員情報・回数券のタブは出さない
+    const viewer = !member && rows.length > 0;
+    document.getElementById("tab-member").hidden = viewer;
+    document.getElementById("tab-tickets").hidden = viewer;
     if (!member) {
-      if (!rows.length || tab === "member" || tab === "tickets") {
+      if (!rows.length) {
         main.innerHTML = loginGate();
         return;
       }
-      // メールのリンクから開いた予約（ログイン不要で確認・取消できる）＋ログインの案内
-      main.innerHTML = focusFirst(rows).map((r) => bookingCard(r, true)).join("") + loginGate();
+      if (tab === "member" || tab === "tickets") {
+        document.getElementById("tab-home").classList.add("active");
+        document.getElementById("tab-" + tab).classList.remove("active");
+      }
+      // メールのリンクから開いた予約（ログイン不要で確認・取消できる）＋ログアウト
+      main.innerHTML = focusFirst(rows).map((r) => bookingCard(r, true)).join("") + logoutFoot();
       return;
     }
     const name = member.name || store().map((x) => x.name).filter(Boolean).pop() || "";
@@ -326,7 +351,7 @@
       main.innerHTML = memberView(name);
       return;
     }
-    if (!rows.length) {
+    if (!rows.length && tab !== "home") {
       main.innerHTML = '<div class="card"><p class="empty">' + t.empty + "</p></div>";
       return;
     }
@@ -346,7 +371,8 @@
         (myTickets.length
           ? myTickets.map((tk) => '<div class="rowline"><span class="k">' + esc(tk.plan_name) + '</span><span>残り ' + tk.uses_left + "回</span></div>").join("")
           : '<p class="empty">お得な回数券をご用意しています。</p>') +
-        '<div class="btnrow"><a class="gold" href="#tickets">回数券を見る</a></div></div>';
+        '<div class="btnrow"><a class="gold" href="#tickets">回数券を見る</a></div></div>' +
+        logoutFoot();
     } else if (tab === "resv") {
       main.innerHTML = focusFirst(rows).map((r) => bookingCard(r, true)).join("");
     }
@@ -446,6 +472,7 @@
       return;
     }
     if (e.target.closest("#mp-logout")) {
+      try { localStorage.removeItem(MYKEY); } catch {}
       if (window.CNMember) window.CNMember.logout();
       else { try { await fetch("/api/member/logout", { method: "POST", credentials: "same-origin" }); } catch {} location.href = "/"; }
       return;
