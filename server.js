@@ -158,6 +158,10 @@ function sendFile(res, file, status, type, head, url, req) {
       }
       // サイト名の付け替え（HTML本文・RSCペイロード・JSチャンクをまとめて揃える）
       if (text.includes(OLD_BRAND)) text = text.split(OLD_BRAND).join(brandFor(file, url));
+      // 写真は無料・容量無制限の配信サービス（jsDelivr：公開GitHubリポジトリのファイルを配る）から出し、
+      // ホスティングの通信量（Render無料プランは月5GB）を節約する。HTML・RSCペイロード・JSの両方で同じく書き換えるので、
+      // 画面の組み立て（ハイドレーション）とも食い違わない。環境変数 IMAGE_CDN を空にすると自サーバーから配信
+      if (IMAGE_CDN) text = text.split('"/images/').join('"' + IMAGE_CDN + "/images/").split("`/images/").join("`" + IMAGE_CDN + "/images/");
       body = Buffer.from(text);
     }
     if (!res.getHeader("Cache-Control")) res.setHeader("Cache-Control", "no-cache");
@@ -296,6 +300,10 @@ function rateLimited(key, limit, windowMs) {
   }
   return b.n > limit;
 }
+
+// 写真の配信元（本番のみ）。jsDelivr は公開リポジトリ shuuinoya/cn-salon-ueno-app の public/ をそのまま配る
+const IMAGE_CDN = process.env.IMAGE_CDN !== undefined ? process.env.IMAGE_CDN.replace(/\/$/, "")
+  : CLOUD ? "https://cdn.jsdelivr.net/gh/shuuinoya/cn-salon-ueno-app@main/public" : "";
 
 // 通信量を減らす：文字のデータ（HTML・JS・CSS・JSON・SVG）は gzip で圧縮して返す
 // （無料ホスティングの通信量の上限対策。リアルタイム通知（SSE）・画像・ファイルの流し込みはそのまま）
