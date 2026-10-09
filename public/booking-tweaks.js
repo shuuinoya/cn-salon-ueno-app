@@ -638,5 +638,5 @@
   }
 
   setInterval(() => { if (!canTouch()) return; apply(); decorateConsent(); decorateComplete(); decorateTicketBanner(); decorateTicketPick(); decorateTicketComplete(); decorateReschedule(); decorateRescheduleComplete(); }, 700);
-  setInterval(() => { load(); }, 15000);
+  setInterval(() => { if (!document.hidden) load(); }, 60000);
 })();

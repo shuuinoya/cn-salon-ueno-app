@@ -123,7 +123,7 @@
     };
     window.__pmCheckNewBookings = check;
     setTimeout(check, 1500);
-    setInterval(check, 10000);
+    setInterval(() => { if (!document.hidden) check(); }, 30000); // 予備の確認（ふだんは予約が入った瞬間の通知で確認）
   }
   function renderNewBookingToast(list, onClose) {
     document.getElementById("pm-toast")?.remove();
@@ -779,7 +779,7 @@
 
   // 店舗マスタ（業務設定）を定期取得し、営業時間外を台帳グリッドにグレー表示する
   async function refreshShop(force) {
-    if (!force && window.__pmShopAt && Date.now() - window.__pmShopAt < 3000) return window.__pmShop;
+    if (!force && window.__pmShopAt && Date.now() - window.__pmShopAt < 60000) return window.__pmShop; // 設定はめったに変わらないため60秒ごと（通信量の節約）
     try {
       const r = await fetch("/api/demo/settings", { cache: "no-store" });
       window.__pmShop = (await r.json()).shopMaster || null;
@@ -829,7 +829,8 @@
     const t = document.querySelector(".ledger-date-trigger time")?.getAttribute("datetime")
       || new Date(Date.now() + 32400000 - 10800000).toISOString().slice(0, 10);
     const now = Date.now();
-    if (!force && window.__pmSchedAt && now - window.__pmSchedAt < 3000 && window.__pmSchedFor === t) return;
+    // 変更は予約が入った瞬間の通知（SSE）で強制的に取り直すため、ふだんの取り直しは60秒ごとで足りる（通信量の節約）
+    if (!force && window.__pmSchedAt && now - window.__pmSchedAt < 60000 && window.__pmSchedFor === t) return;
     window.__pmSchedAt = now;
     window.__pmSchedFor = t;
     try {
@@ -1427,7 +1428,7 @@
     fetchCalData(start.toISOString().slice(0, 10));
   }
   prefetchCalendar();
-  setInterval(prefetchCalendar, 7000);
+  setInterval(() => { if (!document.hidden) prefetchCalendar(); }, 60000); // 変更があれば通知で即更新
 
   // 空き枠タップ時の左パネル：本物と同じ「開始時間／予約の登録（性別）／予約以外の登録（休憩・業務）」
   function decorateNewPanel() {
@@ -2564,7 +2565,7 @@
   // （追加メニューを選択肢に足し、削除済みメニューを選べなくする）
   async function refreshCourses() {
     const now = Date.now();
-    if (window.__pmCoursesAt && now - window.__pmCoursesAt < 5000) return;
+    if (window.__pmCoursesAt && now - window.__pmCoursesAt < 60000) return; // メニューの変更時はキャッシュを無効化して即反映
     window.__pmCoursesAt = now;
     try {
       const r = await fetch("/api/demo/courses", { cache: "no-store" });
@@ -2631,12 +2632,12 @@
   }
 
   // 鍵（予約受付停止）状態の取得。鍵は日ごと（その日だけ有効）なので、台帳に表示中の日の状態を取る。
-  // 3秒キャッシュ（表示する日を変えたらすぐ取り直す）で管理画面と予約サイトに追従する。
+  // 60秒キャッシュ（表示する日を変えたら・鍵を切り替えたら・変更の通知が来たらすぐ取り直す）。
   const ledgerDate = () => document.querySelector(".ledger-date-trigger time")?.getAttribute("datetime")
     || new Date(Date.now() + 9 * 3600e3 - 108e5).toISOString().slice(0, 10);
   async function refreshLocks(force) {
     const now = Date.now(), d0 = ledgerDate();
-    if (!force && window.__pmLocksAt && now - window.__pmLocksAt < 3000 && window.__pmLocksFor === d0) return;
+    if (!force && window.__pmLocksAt && now - window.__pmLocksAt < 60000 && window.__pmLocksFor === d0) return;
     window.__pmLocksAt = now;
     if (window.__pmLocksFor !== d0) window.__pmLocks = {}; // 別の日の鍵の状態を表示しない
     window.__pmLocksFor = d0;
@@ -2693,6 +2694,9 @@
         if (isEditing()) showPending(true);
       }
       refreshSched(true).then(decorateEvents);
+      refreshLocks(true);
+      refreshShop(true);
+      window.__pmCoursesAt = 0;
       prefetchCalendar();
     };
     const kick = () => { clearTimeout(syncTimer); syncTimer = setTimeout(doSync, 250); };
@@ -2713,10 +2717,11 @@
     setInterval(async () => {
       if (!location.pathname.startsWith("/admin") || location.pathname === "/admin/login") return;
       try {
+        if (document.hidden) return;
         const r = await fetch("/api/demo/whoami", { cache: "no-store" });
         if (r.status === 401) location.href = "/admin/login?exp=1";
       } catch {}
-    }, 8000);
+    }, 30000);
   }
   document.addEventListener("DOMContentLoaded", ensure);
 })();

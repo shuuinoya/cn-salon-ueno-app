@@ -621,6 +621,8 @@ const persistReady = (() => {
         state.accounts.delete(LEGACY_ADMIN_ID);
         console.log(`管理者IDを ${LEGACY_ADMIN_ID} → ${ADMIN_ID} へ移行しました`);
       }
+      // 保存データにはメールのHTMLを入れていないため、本文から作り直す
+      for (const m of state.mails || []) if (!m.html && m.body) m.html = mailHtml(m.body);
       // 送信処理中のまま停止・再起動したメールは、届いたかどうか確認できない。
       // 二重送信を防ぐため自動では再送せず、「送信結果不明」として管理画面に残す
       for (const m of state.mails || []) {
@@ -683,7 +685,8 @@ const persistReady = (() => {
       console.log("データ保存が有効です: " + persist.dataFile() +
         (persist.remoteEnabled() ? "（GitHub同期あり）" : ""));
     }
-    persist.startSaver(() => ({ savedAt: Date.now(), state, sessions: [...adminSessions.entries()] }));
+    // メールのHTML（本文から作り直せる）は保存しない：保存データ・GitHubへの通信量を約4割減らす
+    persist.startSaver(() => ({ savedAt: Date.now(), state: { ...state, mails: state.mails.map(({ html, ...m }) => m) }, sessions: [...adminSessions.entries()] }));
   })();
 })();
 

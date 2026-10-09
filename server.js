@@ -297,7 +297,45 @@ function rateLimited(key, limit, windowMs) {
   return b.n > limit;
 }
 
+// 通信量を減らす：文字のデータ（HTML・JS・CSS・JSON・SVG）は gzip で圧縮して返す
+// （無料ホスティングの通信量の上限対策。リアルタイム通知（SSE）・画像・ファイルの流し込みはそのまま）
+const zlib = require("zlib");
+const COMPRESSIBLE = /^(text\/(?!event-stream)|application\/(json|javascript|xml|manifest\+json)|image\/svg)/;
+function withCompression(req, res) {
+  if (!/\bgzip\b/.test(String(req.headers["accept-encoding"] || ""))) return;
+  const writeHead = res.writeHead, write = res.write, end = res.end;
+  let held = null, streaming = false;
+  const flush = (self) => { if (held) { const h = held; held = null; writeHead.apply(self, h); } };
+  // 本文の大きさが分かるまで送信ヘッダーを保留する（end で一度に送るときだけ圧縮できる）
+  res.writeHead = function (...args) { held = args; return this; };
+  res.write = function (...args) { flush(this); streaming = true; return write.apply(this, args); };
+  res.end = function (chunk, encoding, cb) {
+    if (typeof chunk === "function") { cb = chunk; chunk = undefined; encoding = undefined; }
+    if (typeof encoding === "function") { cb = encoding; encoding = undefined; }
+    if (!streaming && held) {
+      const [status, a, b] = held;
+      held = null;
+      const hdrs = a && typeof a === "object" ? a : b && typeof b === "object" ? b : null;
+      if (hdrs) for (const [k, v] of Object.entries(hdrs)) if (v !== undefined) this.setHeader(k, v);
+      const head = typeof a === "string" ? [status, a] : [status];
+      const buf = chunk == null ? null : Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk), typeof encoding === "string" ? encoding : "utf8");
+      if (buf && buf.length > 1024 && status === 200 && req.method !== "HEAD" && !this.getHeader("Content-Encoding") &&
+          COMPRESSIBLE.test(String(this.getHeader("Content-Type") || ""))) {
+        const gz = zlib.gzipSync(buf, { level: 6 });
+        this.setHeader("Content-Encoding", "gzip");
+        this.setHeader("Vary", "Accept-Encoding");
+        this.setHeader("Content-Length", gz.length);
+        writeHead.apply(this, head);
+        return end.call(this, gz, cb);
+      }
+      writeHead.apply(this, head);
+    } else flush(this);
+    return end.call(this, chunk, encoding, cb);
+  };
+}
+
 const handler = (req, res) => {
+  withCompression(req, res);
   const url = new URL(req.url, "http://localhost");
   const head = req.method === "HEAD";
 

@@ -14,6 +14,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const zlib = require("zlib");
 
 const TAG_MAP = "__pm_map__";
 const TAG_SET = "__pm_set__";
@@ -93,7 +94,9 @@ const ghHeaders = () => ({
   "User-Agent": "cn-salon-persist",
   "X-GitHub-Api-Version": "2022-11-28",
 });
-const ghUrl = () => `${GH.api()}/repos/${GH.repo()}/contents/${GH.path()}`;
+// 保存先：圧縮版（state.json.gz）。通信量を約1/10にする（無料ホスティングの通信量の上限対策）。
+// 以前の版の非圧縮ファイル（state.json）も起動時に読み、新しい方を使う
+const ghUrl = (p = GH.path() + ".gz") => `${GH.api()}/repos/${GH.repo()}/contents/${p}`;
 
 // GitHub上の現在のsha（ファイル未作成ならnull）
 async function ghSha() {
@@ -104,14 +107,15 @@ async function ghSha() {
   if (!r.ok) throw new Error("GitHub参照に失敗: HTTP " + r.status);
   return (await r.json()).sha || null;
 }
-// GitHub上の保存データ本文（未作成ならnull）
-async function ghFetch() {
-  const r = await fetch(`${ghUrl()}?ref=${GH.branch()}`, {
+// GitHub上の保存データ本文（未作成ならnull）。gz=true は圧縮版を展開して返す
+async function ghFetch(gz) {
+  const r = await fetch(`${ghUrl(gz ? undefined : GH.path())}?ref=${GH.branch()}`, {
     headers: { ...ghHeaders(), Accept: "application/vnd.github.raw" },
   });
   if (r.status === 404) return null;
   if (!r.ok) throw new Error("GitHub取得に失敗: HTTP " + r.status);
-  return await r.text();
+  const buf = Buffer.from(await r.arrayBuffer());
+  return gz ? zlib.gunzipSync(buf).toString("utf8") : buf.toString("utf8");
 }
 // GitHubへ保存（sha競合は一度だけ取り直して再試行）
 async function ghPut(json, sha, retry = true) {
@@ -120,7 +124,7 @@ async function ghPut(json, sha, retry = true) {
     headers: { ...ghHeaders(), "Content-Type": "application/json" },
     body: JSON.stringify({
       message: "予約データ自動保存 " + new Date().toISOString(),
-      content: Buffer.from(json).toString("base64"),
+      content: zlib.gzipSync(Buffer.from(json), { level: 9 }).toString("base64"),
       branch: GH.branch(),
       ...(sha ? { sha } : {}),
     }),
@@ -137,17 +141,23 @@ async function loadSnapshotWithRemote() {
   const local = loadSnapshot();
   if (!local.enabled || !GH.enabled()) return local;
   try {
-    const text = await ghFetch();
-    if (text) {
-      const remote = JSON.parse(text, reviver);
-      if (remote && remote.state &&
-        (!local.data || (remote.savedAt || 0) >= (local.data.savedAt || 0))) {
-        console.log("GitHubから保存データを復元しました（" + GH.repo() + "）");
-        return { ...local, data: remote };
+    // 圧縮版と以前の非圧縮版の両方を読み、新しい方を使う（片方が無い・壊れていても止めない）
+    let remote = null;
+    for (const gz of [true, false]) {
+      try {
+        const text = await ghFetch(gz);
+        if (!text) continue;
+        const d = JSON.parse(text, reviver);
+        if (d && d.state && (!remote || (d.savedAt || 0) > (remote.savedAt || 0))) remote = d;
+      } catch (e) {
+        console.log("（警告）GitHubの保存データ（" + (gz ? "圧縮版" : "非圧縮版") + "）を読めませんでした: " + e.message);
       }
-    } else {
-      console.log("GitHub保存は有効です（初回保存でファイルが作られます）: " + GH.repo());
     }
+    if (remote && (!local.data || (remote.savedAt || 0) >= (local.data.savedAt || 0))) {
+      console.log("GitHubから保存データを復元しました（" + GH.repo() + "）");
+      return { ...local, data: remote };
+    }
+    if (!remote) console.log("GitHub保存は有効です（初回保存でファイルが作られます）: " + GH.repo());
   } catch (e) {
     console.log("（警告）GitHubからの復元に失敗（ローカルの保存データで起動します）: " + e.message);
   }

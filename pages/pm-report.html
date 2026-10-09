@@ -341,7 +341,7 @@
   document.getElementById("send").addEventListener("click", () => post(true));
 
   load();
-  setInterval(load, 8000);
+  setInterval(() => { if (!document.hidden) load(); }, 30000);
 })();
 </script>
 </body>

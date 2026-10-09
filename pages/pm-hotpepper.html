@@ -179,7 +179,7 @@
       .catch(function () { out.textContent = "通信エラー"; out.style.color = "#d13438"; });
   });
   loadLog();
-  setInterval(loadLog, 3000);
+  setInterval(() => { if (!document.hidden) loadLog(); }, 15000);
 
   // ---- サロンボード転記リスト ----
   function renderSb(items) {
@@ -207,7 +207,7 @@
       .catch(function () {});
   }
   loadSb();
-  setInterval(loadSb, 5000);
+  setInterval(() => { if (!document.hidden) loadSb(); }, 20000);
   document.addEventListener("click", function (e) {
     var cp = e.target.closest(".sb-copy");
     if (cp) {

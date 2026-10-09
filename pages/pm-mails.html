@@ -310,7 +310,9 @@
     } catch {}
   }
   load();
-  setInterval(load, 5000);
+  // 一覧は大きいため、画面を見ているときだけ30秒ごとに更新（見に戻ったときはすぐ更新）
+  setInterval(() => { if (!document.hidden) load(); }, 30000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
 })();
 </script>
 </body>
