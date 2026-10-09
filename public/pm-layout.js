@@ -2046,7 +2046,7 @@
     wrap.innerHTML =
       '<section role="dialog" aria-modal="true">' +
       "<h2>店舗マスタ｜回数券管理</h2>" +
-      '<p class="pm-shop-sub">回数券の作成・編集・公開/非公開と、お客様が保有する回数券の残り回数・利用履歴の確認ができます。残数の手動変更は必ず履歴に残ります。</p>' +
+      '<p class="pm-shop-sub">回数券の作成・編集・公開/非公開と、お客様が保有する回数券の残り回数・利用履歴・復活・期限前リマインドの確認ができます。残数の手動変更は必ず履歴に残ります。</p>' +
       "<h3 class=\"pm-tk-h\">回数券プラン</h3>" +
       '<div class="pm-menu-new">' +
       '<input type="text" id="pm-tk-name" placeholder="回数券の名称（例：回数券 5回券）" maxlength="120">' +
@@ -2056,6 +2056,10 @@
       '<button type="button" class="pm-red" id="pm-tk-add">追加</button>' +
       "</div>" +
       '<div class="pm-tk-plans">読み込み中…</div>' +
+      '<p class="pm-tk-note">【期限切れ分の復活】会員が回数券を購入すると、その会員の期限切れの回数券のうち<b>「復活の組」と「対象メニュー」が同じもの</b>の未使用回数を、' +
+      "「復活分」の回数券として新しい購入日から1年間使えるようにします（元の購入・利用の記録はそのまま残ります）。復活の組が空欄のプランは、同じプランどうしだけが対象です。</p>" +
+      "<h3 class=\"pm-tk-h\">有効期限前のリマインドメール</h3>" +
+      '<div class="pm-tk-remind">読み込み中…</div>' +
       "<h3 class=\"pm-tk-h\">お客様の保有回数券</h3>" +
       '<div class="pm-tk-list">読み込み中…</div>' +
       '<div class="pm-shop-actions"><button type="button" id="pm-tk-close">閉じる</button></div>' +
@@ -2071,12 +2075,17 @@
       return new Date(ms + 9 * 3600e3).toISOString().slice(0, 10);
     };
 
+    let courses = [];
+    const dt16 = (ms) => ms ? new Date(ms + 9 * 3600e3).toISOString().replace("T", " ").slice(0, 16) : "-";
     async function loadPlans() {
       const box = wrap.querySelector(".pm-tk-plans");
       try {
-        const plans = (await (await fetch("/api/demo/ticket-plans", { cache: "no-store" })).json()).plans || [];
-        box.innerHTML = plans.length ? plans.map((p2) =>
-          '<div class="pm-menu-item" data-plan="' + esc(p2.id) + '">' +
+        const j = await (await fetch("/api/demo/ticket-plans", { cache: "no-store" })).json();
+        if (!courses.length) { try { courses = (await (await fetch("/api/demo/courses", { cache: "no-store" })).json()).courses || []; } catch {} }
+        const plans = j.plans || [];
+        box.innerHTML = plans.length ? plans.map((p2) => {
+          const some = Array.isArray(p2.menu_scope);
+          return '<div class="pm-menu-item pm-tk-plan" data-plan="' + esc(p2.id) + '">' +
           '<input type="text" class="tk-name" value="' + esc(p2.name) + '" maxlength="120">' +
           '<input type="number" class="tk-price" value="' + p2.price + '" min="0" step="100">' +
           '<input type="number" class="tk-uses" value="' + p2.uses + '" min="1" max="200" title="回数">' +
@@ -2084,8 +2093,32 @@
           '<label class="pm-tk-pub"><input type="checkbox" class="tk-active"' + (p2.active ? " checked" : "") + "> 公開</label>" +
           '<button type="button" class="pm-red tk-save">変更</button>' +
           '<button type="button" class="tk-del">削除</button>' +
-          "</div>").join("") : '<p class="pm-tk-empty">プランがありません。上の欄から追加してください。</p>';
+          // 2行目：利用条件と復活の条件（「変更」で保存）
+          '<div class="pm-tk-cond">' +
+          '<label>対象メニュー <select class="tk-scope"><option value="all"' + (some ? "" : " selected") + '>すべてのメニュー</option><option value="some"' + (some ? " selected" : "") + ">指定したメニューのみ</option></select></label>" +
+          '<label>復活の組 <input type="text" class="tk-group" value="' + esc(p2.revive_group || "") + '" maxlength="40" placeholder="空欄＝このプランのみ"></label>' +
+          '<label class="pm-tk-pub"><input type="checkbox" class="tk-revive"' + (p2.revive !== false ? " checked" : "") + "> 購入時に期限切れの未使用分を復活</label>" +
+          '<div class="pm-tk-menus"' + (some ? "" : " hidden") + ">" +
+          courses.map((c) => '<label><input type="checkbox" class="tk-menu" value="' + esc(c.id) + '"' + (some && p2.menu_scope.includes(c.id) ? " checked" : "") + "> " + esc(c.name) + "</label>").join("") +
+          "</div></div></div>";
+        }).join("") : '<p class="pm-tk-empty">プランがありません。上の欄から追加してください。</p>';
+        renderRemind(j);
       } catch { box.textContent = "読み込みに失敗しました"; }
+    }
+    // 期限前リマインド：送るタイミング（複数）と、定期処理の最終実行
+    const REMIND_CHOICES = [60, 30, 14, 7, 3, 1];
+    function renderRemind(j) {
+      const box = wrap.querySelector(".pm-tk-remind");
+      const days = (j.settings && j.settings.remindDays) || [30];
+      const run = j.remindRun || {};
+      box.innerHTML =
+        '<div class="pm-tk-cond">' +
+        "<span>有効期限の</span>" +
+        REMIND_CHOICES.map((d) => '<label class="pm-tk-pub"><input type="checkbox" class="tk-rday" value="' + d + '"' + (days.includes(d) ? " checked" : "") + "> " + (d === 1 ? "前日" : d + "日前") + "</label>").join("") +
+        "<span>の" + ((j.settings && j.settings.remindHour) || 10) + ':00に送信</span><button type="button" class="pm-red" id="pm-tk-rsave">保存</button></div>' +
+        '<p class="pm-tk-note">対象：未使用回数が1回以上残っている回数券（使い切り・期限切れ・復活済みには送りません）。同じ回数券・同じ有効期限・同じタイミングには1通だけ。期限が変わったら新しい期限で送ります。<br>' +
+        "定期処理（サーバー内で毎分実行" + (j.cron && j.cron.enabled ? "＋外部のCronからも実行" : "") + "）の最終実行：<b>" + dt16(run.lastAt) + "</b>" +
+        (run.lastCronAt ? "　外部のCronの最終実行：" + dt16(run.lastCronAt) : "") + "　サーバー起動（" + dt16(run.startedAt) + "）以降に作成したリマインド：" + (run.totalQueued || 0) + "通</p>";
     }
     // 回数券ごとのメール送信履歴：送信日時・種類・結果・送信時点の残り回数と有効期限・台帳との一致
     function ticketMailsHtml(t) {
@@ -2093,14 +2126,17 @@
       if (!mails.length) return '<span class="pm-tk-empty">この回数券に関するメールはまだありません。</span>';
       const TYPE = { ticket: "回数券のお知らせ", ticketRemind: "期限リマインド", confirm: "予約完了", remind: "予約リマインド",
         change: "予約変更", cancel: "予約取消", notify: "新規予約通知（店舗）" };
+      const dayLabel = (d) => d ? "（" + (d === 1 ? "前日" : d + "日前") + "）" : "";
       const ST = { sent: "送信済み", failed: "送信失敗", skipped: "送信中止", pending: "送信予定", sending: "送信処理中" };
       const dt = (ms) => ms ? new Date(ms + 9 * 3600e3).toISOString().replace("T", " ").slice(0, 16) : "-";
       return '<table class="pm-tk-mails"><thead><tr><th>送信日時</th><th>種類</th><th>宛先</th><th>結果</th><th>送信時点の残り</th><th>送信時点の有効期限</th><th>台帳との照合</th></tr></thead><tbody>' +
         mails.map((m) =>
           "<tr><td>" + dt(m.sentAt || m.renderedAt || m.scheduledAt) + "</td>" +
-          "<td>" + esc((TYPE[m.type] || m.type) + (m.kind === "store" ? "（店舗宛）" : "")) + "</td>" +
+          "<td>" + esc((TYPE[m.type] || m.type) + dayLabel(m.days) + (m.kind === "store" ? "（店舗宛）" : "") + (m.resendOf ? "・再送" : "")) + "</td>" +
           "<td>" + esc(m.to) + "</td>" +
-          "<td>" + esc(m.status === "sent" && !m.real ? "記録のみ（届いていません）" : ST[m.status] || m.status) + (m.error ? "<br><small>" + esc(m.error) + "</small>" : "") + (m.skipReason ? "<br><small>" + esc(m.skipReason) + "</small>" : "") + "</td>" +
+          "<td>" + esc(m.status === "sent" && !m.real ? "記録のみ（届いていません）" : ST[m.status] || m.status) + (m.error ? "<br><small>" + esc(m.error) + "</small>" : "") + (m.skipReason ? "<br><small>" + esc(m.skipReason) + "</small>" : "") +
+          (m.status === "failed" && !m.resentAs.length ? '<br><button type="button" class="tk-resend" data-mail="' + esc(m.id) + '">再送する</button>' : "") +
+          (m.resentAs.length ? "<br><small>再送済み（" + esc(m.resentAs.join("・")) + "）</small>" : "") + "</td>" +
           "<td>" + (m.snap ? m.snap.usesLeft + "回／" + m.snap.usesTotal + "回" : (m.status === "pending" ? "送信時に確定" : "-")) + "</td>" +
           "<td>" + (m.snap ? esc(m.snap.expiresLabel) : "-") + "</td>" +
           "<td>" + (m.match === true ? "一致" : m.match === false ? '<b style="color:#c0392b">不一致（台帳 残り' + m.ledger.usesLeft + "回）</b>" : "-") + "</td></tr>").join("") +
@@ -2113,28 +2149,44 @@
         if (!tks.length) { box.innerHTML = '<p class="pm-tk-empty">購入された回数券はまだありません。</p>'; return; }
         box.innerHTML =
           '<table class="pm-tk-table"><thead><tr><th>顧客名</th><th>回数券</th><th>購入日</th><th>初期</th><th>利用済</th><th>残り</th><th>有効期限</th><th>期限リマインド</th><th>状態</th><th></th></tr></thead><tbody>' +
-          tks.map((t) =>
-            '<tr data-tk="' + esc(t.id) + '"><td>' + esc(t.buyer_name) + "<br><small>" + esc(t.buyer_email) + "</small></td>" +
-            "<td>" + esc(t.plan_name) + "</td><td>" + jd(t.purchased_at) + "</td>" +
+          tks.map((t) => {
+            // 復活の内訳（どの購入分から何回／この購入で何回復活／新しい券へ何回移したか）
+            const rvInfo = t.kind === "revival"
+              ? '<br><small class="pm-tk-rv">復活分：' + t.revived_from.map((x) => esc(x.purchased_label) + "購入「" + esc(x.plan_name) + "」（" + esc(x.ticket_id) + "）から" + x.count + "回").join("、") + "</small>"
+              : (t.revival ? '<br><small class="pm-tk-rv">この購入で期限切れの未使用' + t.revival.total + "回を復活（" + esc(t.revival.ticket_id) + "）</small>" : "") +
+                (t.revived_out ? '<br><small class="pm-tk-rv">未使用' + t.revived_out + "回を復活済み（" + t.revived_to.map((x) => esc(x.ticket_id)).join("・") + "へ）</small>" : "");
+            const rp = (t.remind_plan || []).map((r) => (r.days === 1 ? "前日" : r.days + "日前") + "：" +
+              ({ waiting: dt16(r.dueAt).slice(5) + "予定", sent: "送信済み", failed: "送信失敗", skipped: "送信中止", pending: "送信予定", sending: "送信中", superseded: "省略", legacy: "送信済み", queued: "送信予定" }[r.state] || r.state)).join("<br>");
+            return '<tr data-tk="' + esc(t.id) + '"><td>' + esc(t.buyer_name) + "<br><small>" + esc(t.buyer_email) + "</small></td>" +
+            "<td>" + (t.kind === "revival" ? '<span class="pm-tk-badge">復活分</span> ' : "") + esc(t.plan_name) + "<br><small>" + esc(t.id) + "</small>" + rvInfo + "</td><td>" + jd(t.purchased_at) + "</td>" +
             "<td>" + t.uses_total + "回</td><td>" + t.used + "回</td><td><b>" + t.uses_left + "回</b></td>" +
-            "<td>" + jd(t.expires_at) + "</td><td>" + (t.remind_sent ? "送信済み" : "未送信") + "</td><td>" + esc(t.status) + "</td>" +
-            '<td><button type="button" class="tk-hist">履歴</button> <button type="button" class="tk-mail">メール</button> <button type="button" class="tk-adj">調整</button></td></tr>' +
+            "<td>" + jd(t.expires_at) + "</td><td><small>" + (rp || (t.remind_sent ? "送信済み" : "対象外")) + "</small></td><td>" + esc(t.status) + "</td>" +
+            '<td><button type="button" class="tk-hist">履歴</button> <button type="button" class="tk-mail">メール</button> <button type="button" class="tk-adj">調整</button>' +
+            (t.kind !== "revival" && !(t.revival && t.revival.total) ? ' <button type="button" class="tk-revive-run" title="この購入に対して、期限切れの未使用分を復活できるか確認します（同じ購入で二重に復活はしません）">復活確認</button>' : "") + "</td></tr>" +
             '<tr class="pm-tk-histrow" hidden><td colspan="10">' +
-            t.history.map((h) =>
+            (Array.isArray(t.history) ? t.history : []).map((h) =>
               esc(String(h.at).replace("T", " ").slice(0, 16)) + "　" +
-              ({ purchase: "購入", use: "利用", refund: "返却", adjust: "残数調整", extend: "期限変更" }[h.type] || h.type) +
+              ({ purchase: "購入", use: "利用", refund: "返却", adjust: "残数調整", extend: "期限変更",
+                revive_out: "復活（新しい券へ移動）", revive_in: "復活（期限切れ分を受け取り）", revival: "復活処理" }[h.type] || h.type) +
               (h.ref ? "（予約ID " + esc(h.ref) + "）" : "") +
               "　" + (h.delta > 0 ? "+" : "") + h.delta + "回 → 残り" + h.left_after + "回" +
+              (h.type === "revive_in" && h.from ? "　※" + h.from.map((f) => esc(f.ticket_id) + "から" + f.count + "回").join("・") : "") +
               (h.note ? "　※" + esc(h.note) : "")).join("<br>") +
             "</td></tr>" +
             // この回数券について送ったメールと、送信時点の残り回数・有効期限（台帳と照合）
-            '<tr class="pm-tk-mailrow" hidden><td colspan="10">' + ticketMailsHtml(t) + "</td></tr>").join("") +
+            '<tr class="pm-tk-mailrow" hidden><td colspan="10">' + ticketMailsHtml(t) + "</td></tr>";
+          }).join("") +
           "</tbody></table>";
       } catch { box.textContent = "読み込みに失敗しました"; }
     }
     loadPlans();
     loadTickets();
 
+    wrap.addEventListener("change", (e) => {
+      if (!e.target.classList.contains("tk-scope")) return;
+      const box = e.target.closest("[data-plan]").querySelector(".pm-tk-menus");
+      if (box) box.hidden = e.target.value !== "some";
+    });
     wrap.addEventListener("click", async (e) => {
       const planRow = e.target.closest("[data-plan]");
       if (e.target.id === "pm-tk-add") {
@@ -2151,15 +2203,38 @@
         return;
       }
       if (planRow && e.target.classList.contains("tk-save")) {
+        const some = planRow.querySelector(".tk-scope").value === "some";
         const body = {
           action: "update", id: planRow.dataset.plan,
           name: planRow.querySelector(".tk-name").value.trim(),
           price: Number(planRow.querySelector(".tk-price").value),
           uses: Number(planRow.querySelector(".tk-uses").value),
+          menu_scope: some ? [...planRow.querySelectorAll(".tk-menu:checked")].map((x) => x.value) : "all",
+          revive_group: planRow.querySelector(".tk-group").value.trim(),
+          revive: planRow.querySelector(".tk-revive").checked,
         };
         const r = await fetch("/api/demo/ticket-plans", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-        if (!r.ok) { window.alert("入力値を確認してください。"); return; }
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) { window.alert(j.error === "menuRequired" ? "「指定したメニューのみ」の場合は、対象のメニューを1つ以上選んでください。" : "入力値を確認してください。"); return; }
         loadPlans();
+        return;
+      }
+      if (e.target.id === "pm-tk-rsave") {
+        const days = [...wrap.querySelectorAll(".tk-rday:checked")].map((x) => Number(x.value));
+        const r = await fetch("/api/demo/ticket-plans", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "settings", remindDays: days }) });
+        if (!r.ok) { window.alert("送信するタイミングを1つ以上選んでください。"); return; }
+        window.alert("期限前リマインドのタイミングを保存しました。");
+        loadPlans(); loadTickets();
+        return;
+      }
+      if (e.target.classList.contains("tk-resend")) {
+        if (!window.confirm("このメールを再送しますか？\n（送信直前に最新の残り回数・有効期限を確認し、送る意味がなくなっていれば送信を中止します）")) return;
+        const r = await fetch("/api/demo/mails", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "resend", id: e.target.dataset.mail }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) { window.alert({ alreadyResent: "このメールはすでに再送しています。", notFailed: "送信失敗のメールだけ再送できます。", hasSecret: "パスワードを含むメールは再送できません。" }[j.error] || "再送できませんでした。"); return; }
+        const st = j.mail && j.mail.status;
+        window.alert(st === "sent" ? (j.mail.real ? "再送しました。" : "再送しました（送信設定がないため記録のみ）。") : st === "skipped" ? "送信を中止しました：" + (j.mail.skipReason || "") : st === "failed" ? "再送も失敗しました：" + (j.mail.error || "") : "再送を受け付けました。");
+        loadTickets();
         return;
       }
       if (planRow && e.target.classList.contains("tk-active")) {
@@ -2183,6 +2258,14 @@
       if (tkRow && e.target.classList.contains("tk-mail")) {
         const mailRow = tkRow.nextElementSibling?.nextElementSibling;
         if (mailRow && mailRow.classList.contains("pm-tk-mailrow")) mailRow.hidden = !mailRow.hidden;
+        return;
+      }
+      if (tkRow && e.target.classList.contains("tk-revive-run")) {
+        const r = await fetch("/api/demo/tickets", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "revive", id: tkRow.dataset.tk }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) { window.alert("確認できませんでした。"); return; }
+        window.alert(j.revival.total ? "期限切れの未使用" + j.revival.total + "回を復活しました（" + j.revival.ticket_id + "）。" : "復活できる期限切れの未使用分はありませんでした。\n" + (j.revival.note || ""));
+        loadTickets();
         return;
       }
       if (tkRow && e.target.classList.contains("tk-adj")) {

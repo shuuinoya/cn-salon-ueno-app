@@ -101,6 +101,7 @@
         const msg = { ticketEmpty: "回数券の残り回数が0のため、ご予約いただけません。",
           ticketExpired: "回数券の有効期限が切れているため、ご予約いただけません。",
           ticketInvalid: "回数券の情報を確認できませんでした（ご予約時のメールアドレスが購入時と一致している必要があります）。",
+          ticketMenu: "この回数券は、選択したメニューではご利用いただけません。",
           loginRequired: "ご予約の日時変更にはログインが必要です。右上の「ログイン」からログインしてください。",
           alreadyCancelled: "変更元のご予約はすでに取り消されています。新しくご予約ください。",
           tooLate: "開始時刻を過ぎたご予約は変更できません。店舗までお電話ください。" }[j2.error];
@@ -184,8 +185,9 @@
       '<a href="/mypage#tickets" class="menu-row">' +
       '<img class="course-thumb" src="/fm-favicon.svg" alt="' + esc2(pl.name) + '"/>' +
       '<span class="menu-row-copy"><b>' + esc2(pl.name) + "（" + pl.uses + "回分・有効期限は購入日から1年間）" +
-      (use.some((t) => t.plan_name === pl.name)
-        ? "　現在の残り回数 " + use.filter((t) => t.plan_name === pl.name).reduce((a, t) => a + t.uses_left, 0) + "回"
+      // 残り回数は同じプランの券（そのプランの購入で復活した分を含む）を合計
+      (use.some((t) => t.plan_id ? t.plan_id === pl.id : t.plan_name === pl.name)
+        ? "　現在の残り回数 " + use.filter((t) => t.plan_id ? t.plan_id === pl.id : t.plan_name === pl.name).reduce((a, t) => a + t.uses_left, 0) + "回"
         : "") +
       "</b><small>" + pl.price.toLocaleString("ja-JP") + "円</small></span>" +
       '<i aria-hidden="true">›</i></a>').join("");
@@ -213,7 +215,10 @@
     const anchor = document.getElementById("fm-notice") || form.querySelector('button[type="submit"]');
     if (!anchor) return;
     await loadMyTickets();
-    const use = usableTickets();
+    // 対象メニューが決まっている券は、そのメニューの予約にだけ出す（使えるかの最終判定はサーバー側）
+    const qs = new URLSearchParams(location.search);
+    const course = qs.get("courses") || qs.get("course") || "";
+    const use = usableTickets().filter((t) => !Array.isArray(t.menu_scope) || !course || t.menu_scope.includes(course.split(",")[0]));
     if (!use.length) return;
     const sec = document.createElement("section");
     sec.id = "fm-ticket-pick";

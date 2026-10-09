@@ -109,6 +109,7 @@
   .tksnap b { color: #6b4f2a; }
   .tksnap .note { color: #8d8d8d; font-size: 12px; }
   .mail-error { color: #c0392b; margin: 6px 0 0; }
+  button.resend { font: inherit; font-size: 12px; background: #fff; border: 1px solid #c0392b; color: #c0392b; border-radius: 3px; padding: 4px 12px; cursor: pointer; }
   .mailbody {
     border-top: 1px dashed #c6b9ad;
     margin: 0 12px;
@@ -206,7 +207,9 @@
       return;
     }
     list.innerHTML = rows.map((m) => {
-      const [label, cls] = TYPE[m.type] || [m.type, "b-notify"];
+      const [label0, cls] = TYPE[m.type] || [m.type, "b-notify"];
+      const d0 = m.type === "ticketRemind" && m.tpl ? (m.tpl.days || 30) : 0;
+      const label = label0 + (d0 ? "（" + (d0 === 1 ? "前日" : d0 + "日前") + "）" : "");
       const stat = m.status === "sent"
         ? (m.real
           ? '<span class="status-accepted">送信済み</span> ' + fmt(m.sentAt || m.scheduledAt)
@@ -228,6 +231,9 @@
         <div class="mailbody">
           <p class="to">宛先：${esc(m.to)}</p>
           ${m.error ? '<p class="mail-error">エラー：' + esc(m.error) + "</p>" : ""}
+          ${m.status === "failed" && !(m.resentAs || []).length && m.type !== "member" ? '<p><button type="button" class="resend" data-resend="' + m.id + '">再送する</button></p>' : ""}
+          ${(m.resentAs || []).length ? '<p class="to">再送済み（' + esc(m.resentAs.join("・")) + "）</p>" : ""}
+          ${m.resendOf ? '<p class="to">' + esc(m.resendOf) + " の再送</p>" : ""}
           ${m.skipReason ? '<p class="mail-error" style="color:#7a7a7a">送信中止の理由：' + esc(m.skipReason) + "</p>" : ""}
           ${ticketSnapHtml(m)}
           ${m.html
@@ -252,6 +258,19 @@
       });
     });
   }
+
+  // 送信失敗のメールを再送（1通につき1回。送信直前に最新の内容を確認し、送る意味がなければ中止）
+  document.getElementById("list").addEventListener("click", async (e) => {
+    const id = e.target.dataset && e.target.dataset.resend;
+    if (!id) return;
+    e.preventDefault();
+    if (!window.confirm("このメールを再送しますか？")) return;
+    e.target.disabled = true;
+    const r = await fetch("/api/demo/mails", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "resend", id }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) window.alert({ alreadyResent: "このメールはすでに再送しています。", notFailed: "送信失敗のメールだけ再送できます。", hasSecret: "パスワードを含むメールは再送できません。" }[j.error] || "再送できませんでした（マネージャー以上の権限が必要です）。");
+    load();
+  });
 
   document.querySelectorAll(".tabs button").forEach((b) => {
     b.addEventListener("click", () => {

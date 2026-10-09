@@ -515,6 +515,8 @@ const state = {
       description: "",    // 欄の下に出す説明文
       maxLength: 2000,    // 入力文字数の上限
     },
+    // 回数券：有効期限の何日前にリマインドメールを送るか（複数可。管理画面の回数券管理で変更）
+    tickets: { remindDays: [30] },
     // 店舗マスタ（管理画面の「店舗情報」に表示。実物と同じ初期値）
     shopMaster: {
       companyId: "28202", areaId: "30031", shopId: "37642", shopCode: "",
@@ -543,15 +545,19 @@ const state = {
   hpKeys: new Map(),       // ホットペッパー連携の予約番号 -> 予約ID（重複受信を防ぐ）
   // 回数券：プラン（管理画面で作成・編集・公開）と発行済み回数券（顧客に紐付く）
   // 有効期限は全券共通で「購入日から1年間」（プランごとの日数設定は持たない）
+  // menu_scope：使えるメニュー（"all"＝全メニュー、または メニューIDの配列）
+  // revive_group：期限切れの未使用分を復活できる回数券の組（同じ組・同じ対象メニューどうしだけ復活。空欄＝同じプランのみ）
+  // revive：このプランを購入したときに、期限切れの未使用分を復活させるか
   ticketPlans: new Map([
-    ["tp-5", { id: "tp-5", name: "回数券 5回券", description: "全メニューでご利用いただけます（1回のご予約で1回分を使用）", price: 30000, uses: 5, active: 1 }],
-    ["tp-10", { id: "tp-10", name: "回数券 10回券", description: "全メニューでご利用いただけます（1回のご予約で1回分を使用）", price: 55000, uses: 10, active: 1 }],
-    ["tp-20", { id: "tp-20", name: "回数券 20回券", description: "全メニューでご利用いただけます（1回のご予約で1回分を使用）", price: 100000, uses: 20, active: 1 }],
+    ["tp-5", { id: "tp-5", name: "回数券 5回券", description: "全メニューでご利用いただけます（1回のご予約で1回分を使用）", price: 30000, uses: 5, active: 1, menu_scope: "all", revive_group: "standard", revive: true }],
+    ["tp-10", { id: "tp-10", name: "回数券 10回券", description: "全メニューでご利用いただけます（1回のご予約で1回分を使用）", price: 55000, uses: 10, active: 1, menu_scope: "all", revive_group: "standard", revive: true }],
+    ["tp-20", { id: "tp-20", name: "回数券 20回券", description: "全メニューでご利用いただけます（1回のご予約で1回分を使用）", price: 100000, uses: 20, active: 1, menu_scope: "all", revive_group: "standard", revive: true }],
   ]),
   ticketPlanSerial: 0,
   tickets: new Map(),            // ticketId -> 回数券（残数・履歴つき）
   ticketSerial: 0,
   ticketUseByBooking: new Map(), // 予約ID -> ticketId（同じ予約での二重消費を防ぐ）
+  ticketPurchaseKeys: new Map(), // 購入の多重送信防止キー -> {ticketId, email, at}（再読み込み・再送信で二重に購入・復活しない）
   hpSeenUids: new Set(),   // メール取込で走査済みのメール番号（毎分の再解析を避ける）
   hpLog: [],               // ホットペッパー連携の受信履歴（管理画面の連携ページに表示）
   reports: new Map(),      // 営業実績（日報）の入力内容 date -> {weather, ...}
@@ -627,6 +633,17 @@ const persistReady = (() => {
       // 期限リマインドの重複防止キーを「送った有効期限」に移行（従来の送信済みフラグを引き継ぐ）
       for (const t of state.tickets.values()) {
         if (t.remind_sent && t.remind_for_expiry === undefined) t.remind_for_expiry = t.expires_at;
+        // 従来の「1か月前リマインド送信済み」は、新しい送信記録（何日前の通知か）では「30日前を送信済み」として扱う
+        if (!Array.isArray(t.remind_log)) {
+          t.remind_log = t.remind_for_expiry !== undefined && t.remind_for_expiry !== null
+            ? [{ days: 30, expires_at: t.remind_for_expiry, at: null, status: "legacy" }] : [];
+        }
+      }
+      // 既存プランに利用条件・復活条件の初期値を付ける（標準の5・10・20回券は同じ組）
+      for (const p2 of state.ticketPlans.values()) {
+        if (p2.menu_scope === undefined) p2.menu_scope = "all";
+        if (p2.revive_group === undefined) p2.revive_group = ["tp-5", "tp-10", "tp-20"].includes(p2.id) ? "standard" : "";
+        if (p2.revive === undefined) p2.revive = true;
       }
       // 環境変数でパスワードが指定されている場合は、保存済みアカウントにも常に適用する
       if (process.env.ADMIN_PASS_HASH && state.accounts.has(ADMIN_ID)) {
@@ -1126,8 +1143,8 @@ function queueMail(kind, type, to, subject, body, scheduledAt, bookingId, tpl) {
 // 一度 sent／failed／skipped になったメールは二度と再送しない（二重送信防止）。
 // 回数券を含むメールは、ここで（送信の直前に）最新の回数券データから本文を作り直し、
 // 送信時点の残り回数・有効期限を ticketSnap としてメール記録に残す。
-function deliverDueMails() {
-  ticketRemindSweep(); // 期限1か月前の自動リマインド（冪等）
+function deliverDueMails(source) {
+  ticketRemindSweep(source); // 有効期限前の自動リマインド（冪等）
   const now = Date.now();
   for (const m of state.mails) {
     if (m.status !== "pending" || m.scheduledAt > now) continue;
@@ -1341,29 +1358,188 @@ function jstDateStr(ms) {
   return `${d.getUTCFullYear()}年${d.getUTCMonth() + 1}月${d.getUTCDate()}日`;
 }
 
-// 有効期限の1か月前になったら自動でリマインドメールを1通だけ送る。
-// 重複防止：「どの有効期限に対して送ったか」（remind_for_expiry）を先に記録するため、
-// この処理が何度・どの端末のアクセスから実行されても、同じ券・同じ期限には1通だけ。
-// （期限が延長された場合は、新しい期限に対して改めて1通送れる）
-// 本文は送信直前に最新の残り回数・有効期限で作る（ticketRemind テンプレート）
-function ticketRemindSweep() {
+// ---- 有効期限前のリマインド ----
+// 管理画面で設定した「期限の何日前」（既定は30日前。複数可）の日の10:00（日本時間）以降に、
+// サーバーの定期処理（毎分。外部のCronからも呼べる）が送信対象を抽出して1通ずつ送る。
+// 重複防止：券ごとに「どの有効期限の・何日前の通知か」を送信記録（remind_log）へ先に書くため、
+// この処理が何度・どこから実行されても、同じ券・同じ期限・同じタイミングには1通だけ。
+// 期限が変わった（延長・復活）場合は新しい期限に対して改めて送る。古い期限に基づく通知は送らない。
+// 停止などで複数のタイミングをまとめて過ぎていた場合は、期限に一番近い1通だけを送る（残りは「省略」と記録）。
+// 本文は送信直前に最新の残り回数・有効期限・会員情報で作る（ticketRemind テンプレート）
+const TICKET_REMIND_HOUR = 10;
+function ticketRemindDays() {
+  const v = state.settings.tickets && state.settings.tickets.remindDays;
+  const days = (Array.isArray(v) ? v : [30]).map(Number).filter((d) => Number.isInteger(d) && d >= 1 && d <= 180);
+  return [...new Set(days)].sort((a, b) => b - a);
+}
+// 「有効期限の日（日本時間）の days 日前」の10:00
+function ticketRemindDueAt(expiresAt, days) {
+  const d = new Date(expiresAt + 9 * 3600e3);
+  const day = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - days * 86400e3;
+  return day + (TICKET_REMIND_HOUR - 9) * 3600e3;
+}
+const ticketRemindTo = (t) => t.member_email || t.buyer_email;
+// 定期処理の実行記録（管理画面の表示用）。毎分変わるため保存データには入れない
+// （保存データに入れると、毎分ディスク保存・GitHub同期が走ってしまう）
+const ticketRemindRun = { startedAt: Date.now(), lastAt: 0, lastQueued: 0, totalQueued: 0, lastSource: "", lastCronAt: 0 };
+function ticketRemindSweep(source) {
   const now = Date.now();
+  const days = ticketRemindDays();
+  let queued = 0;
   for (const t of state.tickets.values()) {
-    if (t.remind_for_expiry === t.expires_at) continue;
-    if (!ticketUsable(t)) continue;                  // 使い切り・期限切れは対象外
-    if (now < t.expires_at - 30 * 86400e3) continue; // 1か月前になるまで待つ
-    t.remind_for_expiry = t.expires_at;
-    t.remind_sent = true; // 管理画面の「期限リマインド」表示用（従来の項目）
-    queueMail("customer", "ticketRemind", t.buyer_email,
+    if (!ticketUsable(t)) continue; // 使い切り・期限切れ・復活済み（残り0）は対象外
+    if (!Array.isArray(t.remind_log)) t.remind_log = [];
+    const sentFor = (d) => t.remind_log.some((x) => x.expires_at === t.expires_at && x.days === d);
+    const due = days.filter((d) => now >= ticketRemindDueAt(t.expires_at, d) && !sentFor(d));
+    if (!due.length) continue;
+    const send = Math.min(...due); // 期限に一番近いタイミング
+    for (const d of due) {
+      if (d !== send) t.remind_log.push({ days: d, expires_at: t.expires_at, at: now, status: "superseded" });
+    }
+    const m = queueMail("customer", "ticketRemind", ticketRemindTo(t),
       `${MAIL_STORE} 回数券の有効期限が近づいています`, "", now, null,
-      { name: "ticketRemind", ticketId: t.id, expiresAt: t.expires_at });
+      { name: "ticketRemind", ticketId: t.id, expiresAt: t.expires_at, days: send });
+    // 送信履歴：会員ID（会員のメールアドレス）・回数券ID・有効期限・通知タイミング（送信日時・結果はメール記録）
+    m.ticketRemind = { memberId: t.member_email || null, ticketId: t.id, expiresAt: t.expires_at, days: send };
+    t.remind_log.push({ days: send, expires_at: t.expires_at, at: now, mail_id: m.id });
+    t.remind_for_expiry = t.expires_at; // 従来の項目（互換のため）
+    t.remind_sent = true;
+    queued++;
   }
+  ticketRemindRun.lastAt = now;
+  ticketRemindRun.lastQueued = queued;
+  ticketRemindRun.totalQueued += queued;
+  if (source) ticketRemindRun.lastSource = source;
+  if (source === "cron") ticketRemindRun.lastCronAt = now;
+  return queued;
 }
 
 function ticketStatus(t) {
-  if (t.uses_left <= 0) return "使い切り";
+  if (t.uses_left <= 0) return t.revived_out > 0 ? "復活済み" : "使い切り";
   if (Date.now() > t.expires_at) return "期限切れ";
   return "有効";
+}
+// 利用済みの回数（復活で新しい券へ移した回数は「利用」に含めない）
+function ticketUsedCount(t) {
+  return t.uses_total - t.uses_left - (t.revived_out || 0);
+}
+// 残り回数の上限（初期回数から、復活で移した回数を除いたもの）
+function ticketMaxLeft(t) {
+  return t.uses_total - (t.revived_out || 0);
+}
+
+// ---- 期限切れ回数券の未使用分の復活 ----
+// 会員が回数券を購入したとき、その会員の回数券のうち「その購入の時点で有効期限が切れていて、
+// 未使用回数が残っていて、購入したプランと同じ組（revive_group）・同じ対象メニュー」のものから、
+// 未使用回数を「復活分」の回数券（別の券として記録）へ移す。
+// ・元の券：残り回数を0にし、何回をどの券へ移したかを履歴（revive_out）に残す（購入回数・利用回数・期限はそのまま）
+// ・復活分の券：どの購入分から何回復活したか（revived_from）を持ち、有効期限は新しい購入の期限と同じ
+// ・購入した券：復活の結果（revival）を記録し、同じ購入で二度と復活しない（冪等）
+// 途中で失敗した場合は、行った変更をすべて元に戻す（購入処理ごと取り消す）
+function ticketConditions(t) {
+  const p = state.ticketPlans.get(t.plan_id);
+  const scope = t.menu_scope !== undefined ? t.menu_scope : p ? p.menu_scope : "all";
+  const group = t.revive_group !== undefined ? t.revive_group : p ? p.revive_group : "";
+  return {
+    scopeKey: Array.isArray(scope) && scope.length ? [...scope].map(String).sort().join(",") : "all",
+    group: String(group || "") || "plan:" + t.plan_id, // 空欄＝同じプランどうしだけ
+  };
+}
+function ticketOwnedBy(t, email) {
+  const e = String(email || "").toLowerCase();
+  if (!e) return false;
+  return t.member_email ? t.member_email === e : t.buyer_email === e; // 別の会員に紐付いた券は対象外
+}
+// 復活の対象（購入した券 newT に対して、src の未使用分を復活させてよいか）。理由も返す
+function revivalCheck(src, newT, ownerEmail) {
+  if (src.id === newT.id || src.id === newT.revival?.ticket_id) return "同じ購入";
+  if (!ticketOwnedBy(src, ownerEmail)) return "別のお客様";
+  if (Date.parse(src.purchased_at) >= Date.parse(newT.purchased_at)) return "新しい購入より後の券";
+  if (src.expires_at >= Date.parse(newT.purchased_at)) return "購入時点で期限内";
+  if (src.uses_left <= 0) return src.revived_out > 0 ? "復活済み" : "使い切り";
+  const a = ticketConditions(src), b = ticketConditions(newT);
+  if (a.group !== b.group) return "回数券の種類が異なる";
+  if (a.scopeKey !== b.scopeKey) return "対象メニューが異なる";
+  return null;
+}
+function reviveForPurchase(newT, ownerEmail, opts = {}) {
+  if (newT.kind === "revival") throw err(400, "notPurchase");
+  // 同じ購入に対しては1回だけ（購入の再送信・再読み込み・再実行でも二重に復活しない）
+  if (newT.revival && !(opts.recheck && newT.revival.total === 0)) return newT.revival;
+  const plan = state.ticketPlans.get(newT.plan_id);
+  const now = Date.now();
+  if (now > newT.expires_at) return { at: now, total: 0, ticket_id: null, items: [], note: "購入した回数券の有効期限が過ぎているため、復活は行いません" };
+  if (plan && plan.revive === false) {
+    newT.revival = { at: now, total: 0, ticket_id: null, items: [], note: "このプランは復活の対象外の設定です" };
+    return newT.revival;
+  }
+  const sources = [...state.tickets.values()]
+    .filter((src) => !revivalCheck(src, newT, ownerEmail))
+    .sort((a, b) => a.expires_at - b.expires_at);
+  const total = sources.reduce((a, src) => a + src.uses_left, 0);
+  if (!total) {
+    newT.revival = { at: now, total: 0, ticket_id: null, items: [], note: "復活できる期限切れの未使用分はありません" };
+    return newT.revival;
+  }
+  const undo = []; // 失敗時に逆順で戻す
+  const serialBefore = state.ticketSerial;
+  try {
+    state.ticketSerial++;
+    const rid = "tk-" + String(state.ticketSerial).padStart(5, "0");
+    const iso = new Date(now).toISOString();
+    const items = sources.map((src) => ({ ticket_id: src.id, plan_id: src.plan_id, plan_name: src.plan_name,
+      purchased_at: src.purchased_at, expired_at: src.expires_at, uses_total: src.uses_total,
+      used: ticketUsedCount(src), count: src.uses_left }));
+    const names = [...new Set(sources.map((src) => src.plan_name.replace(/（復活分）$/, "")))];
+    const c = ticketConditions(newT);
+    const r = {
+      id: rid, kind: "revival", token: crypto.randomBytes(16).toString("hex"),
+      // 名前・プランは復活元に合わせる（復活元が複数のプランにまたがるときは、今回購入したプラン）
+      plan_id: new Set(sources.map((x) => x.plan_id)).size === 1 ? sources[0].plan_id : newT.plan_id,
+      purchase_plan_id: newT.plan_id, plan_name: names.join("・") + "（復活分）",
+      menu_scope: plan ? plan.menu_scope : (newT.menu_scope ?? "all"), revive_group: c.group.startsWith("plan:") ? "" : c.group,
+      price: 0, uses_total: total, uses_left: total,
+      buyer_name: newT.buyer_name, buyer_email: newT.buyer_email, buyer_phone: newT.buyer_phone || "",
+      purchased_at: newT.purchased_at, // 新しい購入日を基準にする
+      expires_at: newT.expires_at,     // 有効期限は新しい購入と同じ（購入日から1年間）
+      revived_from: items, revival_for: newT.id,
+      remind_sent: false, remind_log: [],
+      history: [{ at: iso, type: "revive_in", delta: total, left_after: total, purchase_id: newT.id,
+        from: items.map((x) => ({ ticket_id: x.ticket_id, count: x.count })) }],
+    };
+    state.tickets.set(rid, r);
+    undo.push(() => state.tickets.delete(rid));
+    if (newT.member_email) {
+      const m = state.members.get(newT.member_email);
+      if (m) {
+        memberAttachTicket(m, r);
+        undo.push(() => { m.tickets = m.tickets.filter((x) => x !== rid); });
+      }
+    }
+    for (const src of sources) {
+      const before = { uses_left: src.uses_left, revived_out: src.revived_out, revived_to: src.revived_to, hist: src.history.length };
+      undo.push(() => {
+        src.uses_left = before.uses_left; src.revived_out = before.revived_out; src.revived_to = before.revived_to;
+        src.history.length = before.hist;
+      });
+      const n = src.uses_left;
+      src.uses_left = 0;
+      src.revived_out = (src.revived_out || 0) + n;
+      src.revived_to = [...(src.revived_to || []), { ticket_id: rid, count: n, at: iso, purchase_id: newT.id }];
+      src.history.push({ at: iso, type: "revive_out", delta: -n, left_after: 0, to_ticket: rid, purchase_id: newT.id,
+        expired_at: src.expires_at, note: `期限切れの未使用${n}回を、${jstDateStr(Date.parse(newT.purchased_at))}の購入（${newT.id}）で復活（${rid}へ）` });
+    }
+    const histLen = newT.history.length;
+    undo.push(() => { newT.history.length = histLen; delete newT.revival; });
+    newT.revival = { at: now, total, ticket_id: rid, items };
+    newT.history.push({ at: iso, type: "revival", delta: 0, left_after: newT.uses_left, revival_ticket_id: rid,
+      note: `前回までの購入分から期限切れの未使用${total}回を復活（${rid}）` });
+    return newT.revival;
+  } catch (e) {
+    for (const f of undo.reverse()) { try { f(); } catch {} }
+    state.ticketSerial = serialBefore;
+    throw e;
+  }
 }
 // 「今使える回数券か」の判定はすべてここに集約する（残り1回以上・期限内）
 function ticketUsable(t) {
@@ -1395,7 +1571,8 @@ function ticketInfoBlock(t) {
     SEP,
     `　${t.plan_name}`,
     `購入日 ${jstDateStr(Date.parse(t.purchased_at))}`,
-    `残り回数 あと${t.uses_left}回（${t.uses_total}回のうち ${t.uses_total - t.uses_left}回ご利用済み）`,
+    `残り回数 あと${t.uses_left}回（${t.uses_total}回のうち ${ticketUsedCount(t)}回ご利用済み）`,
+    ...(t.kind === "revival" ? (t.revived_from || []).map((x) => `内訳 ${jstDateStr(Date.parse(x.purchased_at))}購入の「${x.plan_name}」から${x.count}回復活`) : []),
     `有効期限 ${jstDateStr(t.expires_at)}`,
     `ご利用状況 ${ticketUsageLabel(t)}`,
     SEP,
@@ -1433,12 +1610,19 @@ const MAIL_TPL = {
         `　${t.plan_name}`,
         `購入日 ${jstDateStr(Date.parse(t.purchased_at))}`,
         `ご利用可能回数 ${t.uses_total}回`,
-        `残り回数 あと${t.uses_left}回（${t.uses_total}回のうち ${t.uses_total - t.uses_left}回ご利用済み）`,
+        `残り回数 あと${t.uses_left}回（${t.uses_total}回のうち ${ticketUsedCount(t)}回ご利用済み）`,
         `有効期限 ${jstDateStr(t.expires_at)}（購入日から1年間）`,
         `ご利用状況 ${ticketUsageLabel(t)}`,
         `料金 ${t.price.toLocaleString("ja-JP")} 円（店頭でのお支払い）`,
         SEP,
-        ...otherTicketLines(others),
+        ...(() => {
+          const rv = t.revival && t.revival.total ? state.tickets.get(t.revival.ticket_id) : null;
+          if (!rv) return [];
+          return ["", `今回のご購入にあわせて、以前ご購入の回数券で有効期限が切れていた未使用分 ${t.revival.total}回を復活しました。`,
+            ...(rv.revived_from || []).map((x) => `・${jstDateStr(Date.parse(x.purchased_at))}購入「${x.plan_name}」（${x.uses_total}回のうち${x.used}回ご利用・${jstDateStr(x.expired_at)}に期限切れ）から ${x.count}回`),
+            `復活した回数は「${rv.plan_name}」として、残り${rv.uses_left}回・有効期限 ${jstDateStr(rv.expires_at)}（今回の購入日から1年間）でご利用いただけます。`];
+        })(),
+        ...otherTicketLines(others.filter((x) => !(t.revival && x.id === t.revival.ticket_id))),
         "",
         "ご予約の際に「回数券を使用する」をお選びいただくと、1回のご予約につき1回分を使用します。",
         "残り回数はマイページからいつでもご確認いただけます。",
@@ -1454,7 +1638,9 @@ const MAIL_TPL = {
     const others = otherUsableTickets(t);
     const head = p.kind === "refund"
       ? `ご予約の取消にともない、回数券「${t.plan_name}」を1回分お戻ししました。`
-      : `ご予約（予約番号 ${p.ref || "-"}）で回数券「${t.plan_name}」を1回分ご利用いただきました。`;
+      : p.kind === "revive"
+        ? `以前ご購入の回数券で有効期限が切れていた未使用分を、「${t.plan_name}」として復活しました。`
+        : `ご予約（予約番号 ${p.ref || "-"}）で回数券「${t.plan_name}」を1回分ご利用いただきました。`;
     return {
       subject: `${MAIL_STORE} 回数券の残り回数のお知らせ（あと${left}回）`,
       tickets: [t, ...others],
@@ -1473,29 +1659,58 @@ const MAIL_TPL = {
       ].join("\n") + MAIL_COMMON,
     };
   },
-  // 有効期限1か月前のリマインド
-  ticketRemind(p) {
+  // 有効期限前のリマインド（期限の何日前に送るかは管理画面の設定。既定は30日前）
+  ticketRemind(p, m, atSend) {
     const t = state.tickets.get(p.ticketId);
     if (!t) return { skip: "回数券が見つかりません" };
-    // 送信時点で案内の意味がない状態なら、誤った案内を送らずに中止する
-    if (t.uses_left <= 0) return { skip: "送信時点で残り回数が0回のため中止しました" };
+    // 送信時点の最新の状態を確認し、案内の意味がない・古い情報になる場合は送らずに中止する
+    if (t.uses_left <= 0) return { skip: t.revived_out > 0 ? "送信時点で未使用分が新しい回数券へ復活済みのため中止しました" : "送信時点で残り回数が0回のため中止しました" };
     if (Date.now() > t.expires_at) return { skip: "送信時点で有効期限を過ぎていたため中止しました" };
-    if (Date.now() < t.expires_at - 30 * 86400e3) return { skip: "有効期限が延長され、期限まで1か月以上あるため中止しました" };
+    if (p.expiresAt !== undefined && p.expiresAt !== t.expires_at) {
+      return { skip: `有効期限が変更されたため（変更前 ${jstDateStr(p.expiresAt)} → 現在 ${jstDateStr(t.expires_at)}）、変更前の期限に基づく通知は送信しませんでした` };
+    }
+    const days = p.days || 30;
+    if (Date.now() < ticketRemindDueAt(t.expires_at, days)) return { skip: "まだ通知のタイミングではないため中止しました" };
+    if (atSend) {
+      // 二重送信防止：同じ券・同じ有効期限・同じタイミングの通知は1通だけ（再送の場合も含む）
+      const dup = state.mails.some((x) => x !== m && x.type === "ticketRemind" && x.tpl && x.tpl.ticketId === t.id &&
+        x.tpl.expiresAt === t.expires_at && (x.tpl.days || 30) === days && (x.status === "sent" || x.status === "sending"));
+      if (dup) return { skip: "同じ回数券・同じ有効期限・同じタイミングの通知は送信済みのため、重複して送信しませんでした" };
+    }
+    // 宛先・お名前は送信時点の会員情報を優先する
+    const mem = t.member_email ? state.members.get(t.member_email) : null;
+    if (m && atSend) m.to = ticketRemindTo(t);
+    const name = (mem && mem.name) || t.buyer_name || "お客様";
+    const left = Math.max(0, Math.ceil((t.expires_at - Date.now()) / 86400e3));
     const others = otherUsableTickets(t);
     return {
       subject: `${MAIL_STORE} 回数券の有効期限が近づいています`,
       tickets: [t, ...others],
       body: [
-        `${t.buyer_name} 様`,
+        `${name} 様`,
         "",
         `いつも「${MAIL_STORE}」をご利用いただきありがとうございます。`,
-        `お持ちの「${t.plan_name}」の有効期限が近づいています。`,
+        `ご購入いただいている回数券の有効期限が近づいております（有効期限まであと${left}日）。`,
         "",
-        ...ticketInfoBlock(t),
-        "有効期限を過ぎるとご利用いただけなくなります。お早めのご予約をお待ちしております。",
+        SEP,
+        `回数券名：${t.plan_name}`,
+        `残り回数：${t.uses_left}回`,
+        `有効期限：${jstDateStr(t.expires_at)}`,
+        ...(t.kind === "revival" ? (t.revived_from || []).map((x) => `（内訳：${jstDateStr(Date.parse(x.purchased_at))}購入の「${x.plan_name}」から${x.count}回復活）`) : []),
+        SEP,
+        "",
+        "有効期限までに、ぜひ残りの回数券をご利用ください。",
+        "有効期限を過ぎるとご利用いただけなくなりますので、お早めのご予約をお待ちしております。",
         ...otherTicketLines(others),
-        SNAP_NOTE,
+        "",
+        "ご予約は以下の予約サイトからお手続きいただけます。",
         `${origin()}/book`,
+        "",
+        "残り回数はマイページからいつでもご確認いただけます。",
+        `${origin()}/mypage?tab=tickets`,
+        "",
+        `今後とも「${MAIL_STORE}」をよろしくお願いいたします。`,
+        SNAP_NOTE,
       ].join("\n") + MAIL_COMMON,
     };
   },
@@ -1530,10 +1745,11 @@ const MAIL_TPL = {
 
 // 台帳（回数券の履歴）から「ある時刻の時点の残り回数・有効期限」を求める（メールとの照合用）
 function ticketLedgerAt(t, ms) {
+  const hist = Array.isArray(t.history) ? t.history : []; // 壊れた記録があっても画面全体を止めない
   let usesLeft = null;
-  for (const h of t.history || []) if (Date.parse(h.at) <= ms) usesLeft = h.left_after;
+  for (const h of hist) if (Date.parse(h.at) <= ms) usesLeft = h.left_after;
   let expiresAt = t.expires_at;
-  const laterExt = (t.history || []).filter((h) => h.type === "extend" && Date.parse(h.at) > ms);
+  const laterExt = hist.filter((h) => h.type === "extend" && Date.parse(h.at) > ms);
   if (laterExt.length) expiresAt = laterExt[0].expires_before ?? null; // 後から期限変更があれば変更前の値
   return { usesLeft, expiresAt };
 }
@@ -1548,6 +1764,8 @@ function ticketMailLog(t) {
     }
     return {
       id: m.id, type: m.type, kind: m.kind, to: m.to, subject: m.subject, status: m.status, real: !!m.real,
+      days: m.type === "ticketRemind" && m.tpl ? (m.tpl.days || 30) : null, expiresFor: m.tpl ? m.tpl.expiresAt ?? null : null,
+      resendOf: m.resendOf || null, resentAs: m.resentAs || [],
       scheduledAt: m.scheduledAt, sentAt: m.sentAt, renderedAt: m.renderedAt || null,
       error: m.error || null, skipReason: m.skipReason || null, snap, ledger, match,
     };
@@ -1576,24 +1794,41 @@ function applyMailTemplate(m, atSend) {
   return r;
 }
 
+// お客様向けのプラン情報（対象メニューの名前つき）
+function planPublicJson(p2) {
+  const scope = Array.isArray(p2.menu_scope) && p2.menu_scope.length ? p2.menu_scope : "all";
+  return { id: p2.id, name: p2.name, description: p2.description, price: p2.price, uses: p2.uses, menu_scope: scope,
+    menu_names: scope === "all" ? [] : scope.map((id) => getCourse(id)?.name).filter(Boolean) };
+}
 function ticketPublicJson(t) {
   return {
     id: t.id,
+    plan_id: t.plan_id,
     plan_name: t.plan_name,
+    kind: t.kind === "revival" ? "revival" : "purchase",
     purchased_at: t.purchased_at,
     uses_total: t.uses_total,
     uses_left: t.uses_left,
-    used: t.uses_total - t.uses_left,
+    used: ticketUsedCount(t),
+    revived_out: t.revived_out || 0,
     expires_at: t.expires_at,
     expires_label: jstDateStr(t.expires_at),
     status: ticketStatus(t),
+    menu_scope: ticketConditions(t).scopeKey === "all" ? "all" : ticketConditions(t).scopeKey.split(","),
+    // 復活分の券：どの購入分から何回復活したか／購入した券：この購入で復活した回数と復活分の券
+    revived_from: (t.revived_from || []).map((x) => ({ ticket_id: x.ticket_id, plan_name: x.plan_name,
+      purchased_label: jstDateStr(Date.parse(x.purchased_at)), expired_label: jstDateStr(x.expired_at), count: x.count })),
+    revival: t.revival && t.revival.total ? { total: t.revival.total, ticket_id: t.revival.ticket_id } : null,
+    revived_to: (t.revived_to || []).map((x) => ({ ticket_id: x.ticket_id, count: x.count })),
   };
 }
 
 // 予約で使う回数券の事前検証（所有者・残数・期限）。減算はしない
-function ticketForUse(ticketId, token, email, member) {
+function ticketForUse(ticketId, token, email, member, courseId) {
   const t = state.tickets.get(String(ticketId || ""));
   if (!t) throw err(409, "ticketInvalid");
+  const scope = ticketConditions(t).scopeKey;
+  if (courseId !== undefined && scope !== "all" && !scope.split(",").includes(String(courseId))) throw err(409, "ticketMenu");
   // ログイン中の会員は、自分の券ならトークン・メール一致の確認なしで使える
   const own = member && t.member_email === member.email;
   if (!own && t.token !== String(token || "")) throw err(409, "ticketInvalid");
@@ -1624,7 +1859,7 @@ function queueTicketLeftMail(t, type, ref) {
   try {
     queueMail("customer", "ticket", t.buyer_email,
       `${MAIL_STORE} 回数券の残り回数のお知らせ`, "", Date.now(), null,
-      { name: "ticketLeft", ticketId: t.id, kind: type === "refund" ? "refund" : "use", ref: ref || null });
+      { name: "ticketLeft", ticketId: t.id, kind: type === "refund" || type === "revive" ? type : "use", ref: ref || null });
     deliverDueMails();
   } catch {}
 }
@@ -1638,7 +1873,7 @@ function maybeRefundTicket(bk) {
   if (bk.start_at <= Date.now()) return false; // 開始後は返却しない（既存キャンセル規定に合わせる）
   if (!t.history.some((h) => h.type === "use" && h.booking_id === bk.id)) return false;
   if (t.history.some((h) => h.type === "refund" && h.booking_id === bk.id)) return false;
-  t.uses_left = Math.min(t.uses_total, t.uses_left + 1);
+  t.uses_left = Math.min(ticketMaxLeft(t), t.uses_left + 1);
   t.history.push({ at: new Date().toISOString(), type: "refund", booking_id: bk.id, ref: bk.reference, delta: 1, left_after: t.uses_left });
   state.ticketUseByBooking.delete(bk.id);
   bk.ticket_refunded = true;
@@ -1944,7 +2179,7 @@ function queueCancelMails(bk) {
 }
 
 // 送信予定時刻を過ぎたメール（リマインド等）を、アクセスが無くても毎分自動送信する
-const mailTimer = setInterval(deliverDueMails, 60000);
+const mailTimer = setInterval(() => deliverDueMails("timer"), 60000);
 if (mailTimer.unref) mailTimer.unref();
 
 function mailSummary() {
@@ -2415,7 +2650,7 @@ function createPublicBooking(body, member) {
   let useTicket = null;
   if (body.ticketId) {
     if (people !== 1) throw err(400, "invalid"); // 回数券は1名予約のみ
-    useTicket = ticketForUse(body.ticketId, body.ticketToken, body.email, member);
+    useTicket = ticketForUse(body.ticketId, body.ticketToken, body.email, member, body.course);
   }
 
   state.bookingSerial++;
@@ -2646,6 +2881,21 @@ function handleDemoApi(req, res, url) {
   }
 
   // ---- サーバー側の認証・権限チェック（中央ゲート） ----
+  // 外部の定期実行（Render Cron Job・cron-job.org・GitHub Actions など）から呼ぶ入口。
+  // サーバー内でも毎分自動で実行しているが、無料ホスティングの休止に備えて外からも起こせるようにする。
+  // 環境変数 CRON_SECRET を設定したときだけ有効（?key= またはヘッダー X-Cron-Key で照合）
+  if (url.pathname === "/api/cron/tick") {
+    const key = String(url.searchParams.get("key") || req.headers["x-cron-key"] || "");
+    const secret = process.env.CRON_SECRET || "";
+    const ok = secret && key.length === secret.length && crypto.timingSafeEqual(Buffer.from(key), Buffer.from(secret));
+    if (!ok) { res.writeHead(404); res.end(); return true; }
+    const before = state.mails.length;
+    deliverDueMails("cron");
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    res.end(JSON.stringify({ ok: true, at: Date.now(), remindRun: ticketRemindRun, newMails: state.mails.length - before }));
+    return true;
+  }
+
   // /api/demo/* と /api/partner/* は、予約サイト（お客様）用に公開している一部を除き
   // すべてログイン必須。権限（admin > manager > staff）もここでサーバー側判定する。
   // フロント側の表示制御はUIの利便のためだけで、守りはすべてこのゲートと各処理内の検証。
@@ -2657,6 +2907,7 @@ function handleDemoApi(req, res, url) {
       else if ((P === "/api/demo/course-photo" || P === "/api/demo/staff-photo") && isGet) need = null; // 公開画像
       else if (P === "/api/demo/accounts") need = "admin";                // アカウント管理は管理者のみ
       else if (P === "/api/demo/mail-relay") need = "manager";            // メール送信設定はマネージャー以上
+      else if (P === "/api/demo/mails" && !isGet) need = "manager";       // メールの再送はマネージャー以上
       else if (P === "/api/demo/report" || P === "/api/demo/mailtest") need = "manager";
       else if (!isGet && (P === "/api/demo/settings" || P === "/api/demo/ticket-plans" ||
         P === "/api/demo/courses" || P === "/api/demo/tickets" ||
@@ -3156,6 +3407,32 @@ function handleDemoApi(req, res, url) {
     res.end(req.method === "HEAD" ? undefined : JSON.stringify({ locks }));
     return true;
   }
+  if (url.pathname === "/api/demo/mails" && req.method === "POST") {
+    readJson(req, res, 1e4, (b) => {
+      if (b.action !== "resend") throw err(400, "invalid");
+      const m = state.mails.find((x) => x.id === String(b.id || ""));
+      if (!m) throw err(404, "notFound");
+      if (m.status !== "failed") throw err(409, "notFailed");
+      if (m.type === "member") throw err(409, "hasSecret"); // パスワード等を含むメールは記録から再送できない
+      // すでに再送中・再送済みなら、新しく作らない（二重送信防止）
+      const child = state.mails.find((x) => x.resendOf === m.id && ["pending", "sending", "sent"].includes(x.status));
+      if (child) throw err(409, "alreadyResent");
+      const nm = queueMail(m.kind, m.type, m.to, m.subject, m.body, Date.now(), m.bookingId, m.tpl ? { ...m.tpl } : undefined);
+      nm.resendOf = m.id;
+      if (m.ticketRemind) nm.ticketRemind = { ...m.ticketRemind };
+      m.resentAs = [...(m.resentAs || []), nm.id];
+      // 期限前リマインドの再送は、その券の送信記録にも結びつける
+      if (m.type === "ticketRemind" && m.tpl && state.tickets.has(m.tpl.ticketId)) {
+        const t = state.tickets.get(m.tpl.ticketId);
+        const rec = (t.remind_log || []).find((x) => x.mail_id === m.id);
+        if (rec) rec.resend_mail_id = nm.id;
+      }
+      deliverDueMails();
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true, mail: state.mails.find((x) => x.id === nm.id) }));
+    });
+    return true;
+  }
   if (url.pathname === "/api/demo/mails" && (req.method === "GET" || req.method === "HEAD")) {
     deliverDueMails();
     const mails = [...state.mails].sort((a, b) => b.createdAt - a.createdAt);
@@ -3273,7 +3550,7 @@ function handleDemoApi(req, res, url) {
   // 公開中のプラン一覧（予約サイト・マイページの購入導線）
   if (url.pathname === "/api/tickets/plans" && (req.method === "GET" || req.method === "HEAD")) {
     const plans = [...state.ticketPlans.values()].filter((p2) => p2.active === 1)
-      .map((p2) => ({ id: p2.id, name: p2.name, description: p2.description, price: p2.price, uses: p2.uses }));
+      .map(planPublicJson);
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
     res.end(req.method === "HEAD" ? undefined : JSON.stringify({ plans }));
     return true;
@@ -3294,6 +3571,19 @@ function handleDemoApi(req, res, url) {
         // 会員のみ購入可（ログイン中の会員、または予約実績のあるメールアドレス）。
         // 画面の表示制御だけに頼らず、サーバー側で必ず確認する
         if (!member && !isRepeatEmail(email)) throw err(403, "memberOnly");
+        // 多重送信防止：同じ購入キーは同じ結果を返す（再読み込み・再送信・APIの再実行で二重に購入・復活しない）
+        const rk = String(b.requestKey || "").slice(0, 100);
+        if (rk && state.ticketPurchaseKeys.has(rk)) {
+          const prev = state.ticketPurchaseKeys.get(rk);
+          const pt = state.tickets.get(prev.ticketId);
+          if (!pt || prev.email !== email) throw err(409, "requestKeyUsed");
+          const rv = pt.revival && pt.revival.ticket_id ? state.tickets.get(pt.revival.ticket_id) : null;
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true, repeated: true, ticket: { ...ticketPublicJson(pt), token: pt.token },
+            revival: rv ? { total: pt.revival.total, ticket: { ...ticketPublicJson(rv), token: rv.token } } : null }));
+          return;
+        }
+        const serialBefore = state.ticketSerial;
         state.ticketSerial++;
         const tid = "tk-" + String(state.ticketSerial).padStart(5, "0");
         const ttoken = Math.random().toString(16).slice(2) + Math.random().toString(16).slice(2);
@@ -3304,11 +3594,31 @@ function handleDemoApi(req, res, url) {
           buyer_name: name, buyer_email: email, buyer_phone: String(b.phone || "").slice(0, 40),
           purchased_at: new Date(now).toISOString(),
           expires_at: ticketExpiryMs(now), // 購入日から1年間（日本時間・自動確定して保存）
-          remind_sent: false,
+          // 購入時点のプランの利用条件・復活条件を券に記録（後でプランが変更・削除されても判定できるように）
+          menu_scope: plan.menu_scope ?? "all", revive_group: plan.revive_group ?? "",
+          remind_sent: false, remind_log: [],
           history: [{ at: new Date(now).toISOString(), type: "purchase", delta: plan.uses, left_after: plan.uses }],
         };
         state.tickets.set(tid, t);
-        if (member) memberAttachTicket(member, t); // 会員の券として記録（マイページ・予約時の選択に出る）
+        let revival = null;
+        try {
+          if (member) {
+            memberAttachTicket(member, t); // 会員の券として記録（マイページ・予約時の選択に出る）
+            // 会員の購入：期限切れの未使用分を復活（同じ組・同じ対象メニューのものだけ）
+            revival = reviveForPurchase(t, member.email);
+          }
+        } catch (e2) {
+          // 復活の途中で失敗した → 復活の変更は reviveForPurchase 内で戻し済み。購入記録も取り消す
+          state.tickets.delete(tid);
+          if (member) member.tickets = member.tickets.filter((x) => x !== tid);
+          state.ticketSerial = serialBefore;
+          console.log("（警告）回数券の購入・復活処理に失敗したため取り消しました: " + e2.message);
+          throw err(500, "purchaseFailed");
+        }
+        if (rk) {
+          state.ticketPurchaseKeys.set(rk, { ticketId: tid, email, at: now });
+          if (state.ticketPurchaseKeys.size > 3000) state.ticketPurchaseKeys.delete(state.ticketPurchaseKeys.keys().next().value);
+        }
         // 購入メール（既存メールと同じ書式・実送信はallowToのみ）。
         // 本文は送信直前に最新の回数券データで作る（ticketPurchase テンプレート）
         queueMail("customer", "ticket", email,
@@ -3316,7 +3626,9 @@ function handleDemoApi(req, res, url) {
           { name: "ticketPurchase", ticketId: tid });
         deliverDueMails();
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ ok: true, ticket: { ...ticketPublicJson(t), token: ttoken } }));
+        const rv = revival && revival.ticket_id ? state.tickets.get(revival.ticket_id) : null;
+        res.end(JSON.stringify({ ok: true, ticket: { ...ticketPublicJson(t), token: ttoken },
+          revival: rv ? { total: revival.total, ticket: { ...ticketPublicJson(rv), token: rv.token } } : null }));
       } catch (e) {
         res.writeHead(e.status || 500, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: e.status ? e.message : "unavailable" }));
@@ -3334,7 +3646,11 @@ function handleDemoApi(req, res, url) {
         const tickets = [];
         for (const it of items) {
           const t = state.tickets.get(String(it.id || ""));
-          if (t && t.token === String(it.token || "")) tickets.push(ticketPublicJson(t));
+          if (!t || t.token !== String(it.token || "")) continue;
+          tickets.push(ticketPublicJson(t));
+          // その購入で復活した分も表示・予約で使えるようにする（購入した券のトークン＝本人の証明）
+          const rv = t.revival && t.revival.ticket_id ? state.tickets.get(t.revival.ticket_id) : null;
+          if (rv && !items.some((x) => x.id === rv.id) && !tickets.some((x) => x.id === rv.id)) tickets.push({ ...ticketPublicJson(rv), token: rv.token });
         }
         res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
         res.end(JSON.stringify({ tickets }));
@@ -3403,7 +3719,12 @@ function handleDemoApi(req, res, url) {
       }
       for (const it of (Array.isArray(link.tickets) ? link.tickets : []).slice(0, 50)) {
         const t = state.tickets.get(String(it?.id || ""));
-        if (t && t.token === String(it?.token || "") && (!t.member_email || t.member_email === email)) memberAttachTicket(m, t);
+        if (t && t.token === String(it?.token || "") && (!t.member_email || t.member_email === email)) {
+          memberAttachTicket(m, t);
+          // その購入で復活した分（店舗が管理画面から復活させた場合など）も一緒に紐付ける
+          const rv = t.revival && t.revival.ticket_id ? state.tickets.get(t.revival.ticket_id) : null;
+          if (rv && (!rv.member_email || rv.member_email === email)) memberAttachTicket(m, rv);
+        }
       }
       const token = crypto.randomBytes(24).toString("hex");
       state.memberSessions.set(token, { email, created: Date.now() });
@@ -3491,9 +3812,10 @@ function handleDemoApi(req, res, url) {
     }
     bookings.sort((a, b) => b.start - a.start);
     const tickets = m.tickets.map((id) => state.tickets.get(id)).filter(Boolean)
+      .sort((a, b) => (ticketUsable(b) - ticketUsable(a)) || (a.expires_at - b.expires_at))
       .map((t) => ({ ...ticketPublicJson(t), token: t.token }));
     const plans = [...state.ticketPlans.values()].filter((p2) => p2.active === 1)
-      .map((p2) => ({ id: p2.id, name: p2.name, description: p2.description, price: p2.price, uses: p2.uses }));
+      .map(planPublicJson);
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
     res.end(req.method === "HEAD" ? undefined : JSON.stringify({ member: memberPublic(m), bookings, tickets, plans }));
     return true;
@@ -3522,7 +3844,9 @@ function handleDemoApi(req, res, url) {
   if (url.pathname === "/api/demo/ticket-plans") {
     if (req.method === "GET" || req.method === "HEAD") {
       res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
-      res.end(req.method === "HEAD" ? undefined : JSON.stringify({ plans: [...state.ticketPlans.values()] }));
+      res.end(req.method === "HEAD" ? undefined : JSON.stringify({ plans: [...state.ticketPlans.values()],
+        settings: { remindDays: ticketRemindDays(), remindHour: TICKET_REMIND_HOUR }, remindRun: ticketRemindRun,
+        cron: { enabled: !!process.env.CRON_SECRET } }));
       return true;
     }
     if (req.method === "POST") {
@@ -3536,9 +3860,29 @@ function handleDemoApi(req, res, url) {
             const price = Math.round(Number(b.price ?? p2?.price));
             const uses = Math.round(Number(b.uses ?? p2?.uses));
             if (!name || !(price >= 0) || !(uses >= 1 && uses <= 200)) throw err(400, "invalid");
+            // 対象メニュー："all" または 存在するメニューIDの配列（1つ以上）
+            let scope = b.menu_scope ?? p2?.menu_scope ?? "all";
+            if (scope !== "all") {
+              if (!Array.isArray(scope)) throw err(400, "invalid");
+              scope = [...new Set(scope.map(String))].filter((id) => courseStore.has(id));
+              if (!scope.length) throw err(400, "menuRequired");
+            }
+            const group = String(b.revive_group ?? p2?.revive_group ?? "").trim().slice(0, 40);
+            const revive = b.revive === undefined ? (p2 ? p2.revive !== false : true) : !!b.revive;
             // 有効期限は全券「購入日から1年間」固定（プランごとの設定は持たない）
-            return { name, price, uses, description: String(b.description ?? p2?.description ?? "").slice(0, 300) };
+            return { name, price, uses, description: String(b.description ?? p2?.description ?? "").slice(0, 300),
+              menu_scope: scope, revive_group: group, revive };
           };
+          if (b.action === "settings") {
+            // 期限前リマインド：期限の何日前に送るか（1〜180日・最大6つ）。空にはできない（最低1つ）
+            const days = [...new Set((Array.isArray(b.remindDays) ? b.remindDays : []).map(Number))]
+              .filter((d) => Number.isInteger(d) && d >= 1 && d <= 180).sort((x, y) => y - x).slice(0, 6);
+            if (!days.length) throw err(400, "remindDaysRequired");
+            state.settings.tickets = { ...(state.settings.tickets || {}), remindDays: days };
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ ok: true, settings: { remindDays: ticketRemindDays(), remindHour: TICKET_REMIND_HOUR } }));
+            return;
+          }
           if (b.action === "add") {
             state.ticketPlanSerial++;
             const id2 = "tp-c" + state.ticketPlanSerial;
@@ -3569,10 +3913,19 @@ function handleDemoApi(req, res, url) {
   if (url.pathname === "/api/demo/tickets") {
     if (req.method === "GET" || req.method === "HEAD") {
       deliverDueMails();
+      const days = ticketRemindDays();
       const list = [...state.tickets.values()].map((t) => ({
         ...ticketPublicJson(t),
-        buyer_name: t.buyer_name, buyer_email: t.buyer_email, buyer_phone: t.buyer_phone,
+        buyer_name: t.buyer_name, buyer_email: t.buyer_email, buyer_phone: t.buyer_phone, member_email: t.member_email || null,
         price: t.price, remind_sent: t.remind_for_expiry === t.expires_at, history: t.history,
+        revival_detail: t.revival || null, revived_from_detail: t.revived_from || [],
+        // 期限前リマインド：いまの有効期限に対する各タイミングの予定日時と状態
+        remind_plan: ticketUsable(t) ? days.map((d) => {
+          const rec = (t.remind_log || []).find((x) => x.expires_at === t.expires_at && x.days === d);
+          const mail = rec && rec.mail_id ? state.mails.find((x) => x.id === rec.mail_id) : null;
+          return { days: d, dueAt: ticketRemindDueAt(t.expires_at, d), state: rec ? (rec.status || (mail ? mail.status : "queued")) : "waiting" };
+        }) : [],
+        remind_log: t.remind_log || [],
         mails: ticketMailLog(t),
       }));
       res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
@@ -3585,6 +3938,18 @@ function handleDemoApi(req, res, url) {
       req.on("end", () => {
         try {
           const b = JSON.parse(raw || "{}");
+          if (b.action === "revive") {
+            // 復活処理の実行（会員以外の購入や、条件を見直したあとの確認用）。同じ購入では二重に復活しない
+            const t = state.tickets.get(String(b.id || ""));
+            if (!t) throw err(404, "notFound");
+            if (t.kind === "revival") throw err(400, "notPurchase");
+            const before = t.revival ? t.revival.total : null;
+            const r = reviveForPurchase(t, t.member_email || t.buyer_email, { recheck: true });
+            if (r.total && before !== r.total) queueTicketLeftMail(state.tickets.get(r.ticket_id), "revive", t.id);
+            res.writeHead(200, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ ok: true, revival: r, already: before !== null && before === r.total }));
+            return;
+          }
           if (b.action !== "adjust") throw err(400, "invalid");
           const t = state.tickets.get(String(b.id || ""));
           if (!t) throw err(404, "notFound");
@@ -3594,7 +3959,7 @@ function handleDemoApi(req, res, url) {
           const extendDays = Math.round(Number(b.extendDays || 0));
           if (usesDelta) {
             const next = t.uses_left + usesDelta;
-            if (next < 0 || next > t.uses_total) throw err(400, "outOfRange");
+            if (next < 0 || next > ticketMaxLeft(t)) throw err(400, "outOfRange");
             t.uses_left = next;
             t.history.push({ at: new Date().toISOString(), type: "adjust", delta: usesDelta, left_after: t.uses_left, note });
           }

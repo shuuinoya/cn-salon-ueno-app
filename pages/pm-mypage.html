@@ -407,11 +407,19 @@
   function ticketsView() {
     const own = myTickets.map((tk) => {
       const stCls = tk.status === "有効" ? "" : " gray";
+      const revival = tk.kind === "revival";
+      // 残数の根拠：復活分は「どの購入分から何回」、購入した券は「この購入で復活した回数」、元の券は「復活で移した回数」
+      const why = revival
+        ? (tk.revived_from || []).map((x) => esc(x.purchased_label) + "購入の「" + esc(x.plan_name) + "」から" + x.count + "回").join("<br>")
+        : "";
       return '<div class="card">' +
         '<div class="rowline"><span class="badge' + stCls + '">' + esc(tk.status) + '</span><span class="when">' + esc(tk.plan_name) + "</span></div>" +
-        '<div class="rowline"><span class="k">購入日</span><span>' + jd(tk.purchased_at) + "</span></div>" +
-        '<div class="rowline"><span class="k">利用可能回数</span><span>' + tk.uses_total + "回</span></div>" +
-        '<div class="rowline"><span class="k">残り回数</span><span><b style="font-size:16px">' + tk.uses_left + '回</b>（利用済み ' + tk.used + "回）</span></div>" +
+        '<div class="rowline"><span class="k">' + (revival ? "復活した日" : "購入日") + "</span><span>" + jd(tk.purchased_at) + "</span></div>" +
+        '<div class="rowline"><span class="k">' + (revival ? "復活した回数" : "利用可能回数") + "</span><span>" + tk.uses_total + "回</span></div>" +
+        (revival ? '<div class="rowline"><span class="k">内訳</span><span>前回までの購入分から復活<br>' + why + "</span></div>" : "") +
+        '<div class="rowline"><span class="k">残り回数</span><span><b style="font-size:16px">' + tk.uses_left + '回</b>（利用済み ' + tk.used + "回" +
+        (tk.revived_out ? "・期限切れ後に" + tk.revived_out + "回を新しい回数券へ復活" : "") + "）</span></div>" +
+        (tk.revival ? '<div class="rowline"><span class="k">復活</span><span>このご購入で、期限切れの未使用' + tk.revival.total + "回を復活しました（「復活分」の回数券）</span></div>" : "") +
         '<div class="rowline"><span class="k">有効期限</span><span>' + (tk.expires_label || jd(new Date(tk.expires_at + 9 * 3600e3).toISOString())) + "</span></div>" +
         "</div>";
     }).join("");
@@ -486,10 +494,12 @@
       // ログイン中は会員情報のメールアドレスで購入（入力不要）。お名前が未登録のときだけ確認する
       let nm = member.name || "";
       if (!nm) { nm = window.prompt("お名前を入力してください", "") || ""; if (!nm.trim()) return; }
+      // 購入キー：通信の再試行・二重押しでも、同じ購入として1回だけ処理される（サーバー側で判定）
+      const requestKey = "tp-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
       try {
         const r = await fetch("/api/tickets/purchase", { method: "POST", credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ planId: buyId, name: nm.trim() }) });
+          body: JSON.stringify({ planId: buyId, name: nm.trim(), requestKey }) });
         const j = await r.json();
         if (!r.ok || !j.ok) {
           if (j.error === "memberOnly") {
@@ -498,8 +508,10 @@
           }
           throw new Error(j.error || "purchase");
         }
-        tkSave([...tkStore(), { id: j.ticket.id, token: j.ticket.token }]);
-        window.alert("回数券を購入しました。お支払いは店頭にて承ります。\n残り回数：" + j.ticket.uses_left + "回");
+        tkSave([...tkStore(), { id: j.ticket.id, token: j.ticket.token },
+          ...(j.revival ? [{ id: j.revival.ticket.id, token: j.revival.ticket.token }] : [])]);
+        window.alert("回数券を購入しました。お支払いは店頭にて承ります。\n残り回数：" + j.ticket.uses_left + "回" +
+          (j.revival ? "\n\n以前ご購入の回数券で有効期限が切れていた未使用分 " + j.revival.total + "回を復活しました。\n（「" + j.revival.ticket.plan_name + "」・有効期限 " + j.revival.ticket.expires_label + "）" : ""));
       } catch {
         window.alert("購入できませんでした。入力内容をご確認ください。");
         return;

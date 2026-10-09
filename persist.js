@@ -166,18 +166,23 @@ function startSaver(getSnapshot) {
   const file = dataFile();
   fs.mkdirSync(path.dirname(file), { recursive: true });
   let lastWritten = "";
+  let lastBody = null; // 保存時刻（savedAt）を除いた中身。中身が変わったときだけ書く
   try { lastWritten = fs.readFileSync(file, "utf8"); } catch {}
 
   const saveNow = () => {
     if (savesAborted) return;
-    let json;
+    let json, body;
     try {
-      json = JSON.stringify(getSnapshot(), replacer);
+      const { savedAt, ...rest } = getSnapshot();
+      body = JSON.stringify(rest, replacer);
+      // 変化なし＝ディスクに触れない（保存時刻だけが違う場合も書かない。GitHubへの同期も起きない）
+      if (body === lastBody) return;
+      json = body === "{}" ? JSON.stringify({ savedAt }) : '{"savedAt":' + JSON.stringify(savedAt) + "," + body.slice(1);
     } catch (e) {
       console.log("（警告）保存データの作成に失敗: " + e.message);
       return;
     }
-    if (json === lastWritten) return; // 変化なし＝ディスクに触れない
+    if (json === lastWritten) { lastBody = body; return; }
     try {
       const tmp = file + ".tmp";
       fs.writeFileSync(tmp, json, { mode: 0o600 });
@@ -185,6 +190,7 @@ function startSaver(getSnapshot) {
       fs.renameSync(tmp, file); // 原子的置換
       try { fs.chmodSync(file, 0o600); } catch {}
       lastWritten = json;
+      lastBody = body;
     } catch (e) {
       console.log("（警告）データ保存に失敗（次回の保存で再試行します）: " + e.message);
     }
