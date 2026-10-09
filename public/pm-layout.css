@@ -1892,3 +1892,6 @@ main.ledger-app .ledger-row > .ledger-staff-cell { position: sticky; left: 0; }
   #pm-ticket-modal .pm-menu-new .pm-tk-fixed { white-space: normal; flex-basis: 100%; order: 9; }
   #pm-ticket-modal .pm-menu-new input[type="text"] { flex-basis: 100%; }
 }
+
+/* 入力中のため台帳の更新を保留しているときのお知らせ */
+#pm-sync-pending { position: fixed; left: 50%; bottom: 74px; transform: translateX(-50%); z-index: 1200; background: #e8514d; color: #fff; border: 0; border-radius: 18px; padding: 8px 16px; font: inherit; font-size: 13px; font-weight: 700; box-shadow: 0 4px 14px rgb(0 0 0 / 0.25); cursor: pointer; max-width: calc(100vw - 32px); }

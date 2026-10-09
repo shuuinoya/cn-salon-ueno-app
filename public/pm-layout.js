@@ -97,7 +97,8 @@
 
   // ---- 新しい予約の通知 ----
   // 端末ごとに「どこまで見たか」を覚え、それより後に入った予約サイト・ホットペッパーの予約を知らせる。
-  // 初めて開いた端末では、直近24時間の予約を知らせる。20秒ごとに確認（台帳を開いたままでも届く）
+  // 初めて開いた端末では、直近24時間の予約を知らせる。予約が入った瞬間の通知（SSE）で即確認し、
+  // 念のため10秒ごとにも確認する（通知の接続が切れていても、別の日の予約でも、すぐ気づける）
   const WDJ = ["日", "月", "火", "水", "木", "金", "土"];
   function watchNewBookings() {
     const KEY = "pm-seen-booking-at";
@@ -116,10 +117,13 @@
         seen = Math.max(seen, ...fresh.map((b) => b.created));
         try { localStorage.setItem(KEY, String(seen)); } catch {}
         renderNewBookingToast([...shown.values()].sort((a, b) => b.created - a.created), () => shown.clear());
+        // 通知の接続が切れていた等で台帳がまだ古い場合に備え、台帳も最新にする
+        if (typeof window.__pmKickSync === "function") window.__pmKickSync();
       } catch {}
     };
+    window.__pmCheckNewBookings = check;
     setTimeout(check, 1500);
-    setInterval(check, 20000);
+    setInterval(check, 10000);
   }
   function renderNewBookingToast(list, onClose) {
     document.getElementById("pm-toast")?.remove();
@@ -497,6 +501,7 @@
       window.__pmRefreshClose2 = 1;
       document.addEventListener("click", (e) => {
         if (!e.target.closest(".ledger-refresh")) return;
+        if (window.__pmAutoSync) return; // 予約が入ったときの自動更新では、開いている左パネルを閉じない
         const closeBtn = [...document.querySelectorAll(".ledger-side button")]
           .find((b) => (b.textContent === "×" || b.textContent === "X") && !b.closest("#pm-np"));
         closeBtn?.click();
@@ -2638,27 +2643,44 @@
   if (!window.__pmSse && location.pathname === "/admin") {
     window.__pmSse = 1;
     let pendingSync = false, syncTimer = 0;
+    // 入力フォーム（予約・休憩・業務の入力や編集）を開いている間だけ自動更新を保留する
+    // （入力中の内容が消えないように）。左パネルを開いているだけ・検索中なら、そのまま更新する
+    const isEditing = () => !!document.querySelector(".ledger-side .ledger-side-form");
+    const showPending = (on) => {
+      let el = document.getElementById("pm-sync-pending");
+      if (!on) { el?.remove(); return; }
+      if (el) return;
+      el = document.createElement("button");
+      el.type = "button";
+      el.id = "pm-sync-pending";
+      el.textContent = "新しい予約・変更があります（入力を閉じると表示されます）";
+      el.title = "入力中の内容を保存または閉じると、台帳が最新になります";
+      el.addEventListener("click", () => { el.remove(); });
+      document.body.appendChild(el);
+    };
     const doSync = () => {
       const rb = document.querySelector(".ledger-refresh");
-      // 編集・詳細パネルを開いている間は自動更新を保留（勝手に閉じない）
-      const editing = !!document.querySelector(".ledger-side");
-      if (rb && !rb.disabled && !editing) {
+      if (rb && !rb.disabled && !isEditing()) {
         pendingSync = false;
-        rb.click(); // 本物の再読込（React側がサーバーの最新データを取得して描画）
+        showPending(false);
+        window.__pmAutoSync = true;
+        try { rb.click(); } finally { window.__pmAutoSync = false; } // 本物の再読込（React側がサーバーの最新データを取得して描画）
       } else {
         pendingSync = true; // 編集中は保留（閉じたら下のintervalが追いつく）
+        if (isEditing()) showPending(true);
       }
       refreshSched(true).then(decorateEvents);
       prefetchCalendar();
     };
     const kick = () => { clearTimeout(syncTimer); syncTimer = setTimeout(doSync, 250); };
-    setInterval(() => { if (pendingSync) doSync(); }, 2000);
+    window.__pmKickSync = kick;
+    setInterval(() => { if (pendingSync) doSync(); }, 1000);
     try {
       const es = new EventSource("/api/demo/events");
-      es.onmessage = kick;
+      es.onmessage = () => { kick(); if (window.__pmCheckNewBookings) setTimeout(window.__pmCheckNewBookings, 400); };
       es.onopen = kick; // 再接続時は必ず最新へ再同期（切断中の変更を取りこぼさない）
     } catch {}
-    document.addEventListener("visibilitychange", () => { if (!document.hidden) kick(); });
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) { kick(); window.__pmCheckNewBookings?.(); } });
   }
 
   // セッション切れの番人：サーバー再起動・アカウント停止・期限切れでセッションが
