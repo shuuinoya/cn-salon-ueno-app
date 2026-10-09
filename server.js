@@ -127,6 +127,12 @@ function sendFile(res, file, status, type, head, url, req) {
         // ブラウザ側は「今日（3時切替）から7日分」を描くため食い違い、Reactがエラー（#418）を出して
         // 画面を描き直していた。ブラウザと同じ計算で、見出しを今日からの7日分に書き換えて返す
         if (url.pathname === "/book/select-datetime") text = fixDateHeaders(text, url);
+        // 予約確認ページ：保存版はメニュー未選択の状態（「メニューを選択してください。」）で保存されているため、
+        // メニューを選んで来たときは、画面が組み上がるまでの一瞬に誤った案内が見えないよう「読み込み中」にする
+        if (url.pathname === "/book/confirm" && url.searchParams.get("course")) {
+          text = text.replace('<section class="booking-form-card"><p>メニューを選択してください。</p><a href="/book">メニューを変更</a></section>',
+            '<section class="booking-form-card"><p>予約内容を読み込んでいます…</p></section>');
+        }
         // 予約サイトの全ページに、会員ログイン（右上ボタン→ログインモーダル）のスクリプトを差し込む
         // （管理画面には入れない。?v=更新時刻 を付けて、ブラウザに古いキャッシュを使わせない）
         if (brandFor(file, url) === BOOKING_BRAND && !file.includes("pm-login") && !file.includes("admin")) {

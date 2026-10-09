@@ -173,9 +173,12 @@
     if (!firstCard || document.getElementById("fm-tkbanner")) return;
     await loadMyTickets();
     const use = usableTickets();
-    let plans = [];
+    let plans = [], title = "会員様向け 回数券";
     try {
-      plans = (await (await origFetch("/api/tickets/plans", { cache: "no-store" })).json()).plans || [];
+      const pj = await (await origFetch("/api/tickets/plans", { cache: "no-store" })).json();
+      // 管理画面で「予約・メニューページの最上部に表示」にしたプランだけ（並び順も管理画面の順）
+      plans = (pj.plans || []).filter((pl) => pl.show_banner !== false);
+      if (pj.settings && pj.settings.bannerTitle) title = pj.settings.bannerTitle;
     } catch {}
     if (!plans.length && !use.length) return;
     const box = document.createElement("section");
@@ -184,14 +187,16 @@
     const rows = plans.map((pl) =>
       '<a href="/mypage#tickets" class="menu-row">' +
       '<img class="course-thumb" src="/fm-favicon.svg" alt="' + esc2(pl.name) + '"/>' +
-      '<span class="menu-row-copy"><b>' + esc2(pl.name) + "（" + pl.uses + "回分・有効期限は購入日から1年間）" +
+      '<span class="menu-row-copy"><b>' + esc2(pl.name) + "（" + pl.uses + "回分・有効期限は購入日から" + esc2(pl.valid_label || "1年間") + "）" +
+      (pl.menu_names && pl.menu_names.length ? "　対象：" + esc2(pl.menu_names.join("・")) : "") +
       // 残り回数は同じプランの券（そのプランの購入で復活した分を含む）を合計
       (use.some((t) => t.plan_id ? t.plan_id === pl.id : t.plan_name === pl.name)
         ? "　現在の残り回数 " + use.filter((t) => t.plan_id ? t.plan_id === pl.id : t.plan_name === pl.name).reduce((a, t) => a + t.uses_left, 0) + "回"
         : "") +
-      "</b><small>" + pl.price.toLocaleString("ja-JP") + "円</small></span>" +
+      "</b><small>" + (pl.regular_price > pl.price ? "<s>" + pl.regular_price.toLocaleString("ja-JP") + "円</s> " : "") + pl.price.toLocaleString("ja-JP") + "円" +
+      (pl.description ? "　" + esc2(pl.description) : "") + "</small></span>" +
       '<i aria-hidden="true">›</i></a>').join("");
-    box.innerHTML = "<h2>会員様向け 回数券</h2>" + '<div class="list-body">' + rows + "</div>";
+    box.innerHTML = "<h2>" + esc2(title) + "</h2>" + '<div class="list-body">' + rows + "</div>";
     firstCard.parentElement.insertBefore(box, firstCard);
     if (!document.getElementById("fm-tk-style")) {
       const st = document.createElement("style");

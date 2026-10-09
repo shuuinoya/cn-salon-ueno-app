@@ -203,6 +203,7 @@
   let rows = []; // {entry, bk}
   let myTickets = [];
   let ticketPlans = [];
+  let ticketNote = "お支払いは店頭にて承ります。ご予約時に「回数券を使用する」を選ぶと、1回のご予約で1回分を使用します。";
   // 会員（ログイン中のお客様）。マイページはログイン必須：予約の変更・取消、回数券の購入・残数確認は
   // すべてログインした本人だけができる（本人確認はサーバー側 /api/member/*）
   let member = null;
@@ -211,7 +212,7 @@
     member = null; memberData = null;
     try {
       const r = await fetch("/api/member/me", { cache: "no-store", credentials: "same-origin" });
-      if (r.ok) { memberData = await r.json(); member = memberData.member; }
+      if (r.ok) { const j = await r.json(); if (j && j.member) { memberData = j; member = j.member; } }
     } catch {}
   }
   async function loadTickets() {
@@ -229,6 +230,8 @@
     try {
       ticketPlans = (memberData && memberData.plans) ||
         (await (await fetch("/api/tickets/plans", { cache: "no-store" })).json()).plans || [];
+      // 購入欄の案内文（管理画面の回数券管理で設定）
+      if (memberData && memberData.ticketSettings && memberData.ticketSettings.purchaseNote !== undefined) ticketNote = memberData.ticketSettings.purchaseNote;
     } catch {}
   }
   async function loadAll() {
@@ -403,7 +406,7 @@
       '<div class="card"><div class="btnrow"><button type="button" class="cancel" id="mp-logout">' + (ja ? "ログアウト" : "Log out") + "</button></div></div>";
   }
 
-  const jd = (iso) => String(iso || "").slice(0, 10);
+  const jd = (iso) => { const ms = typeof iso === "number" ? iso : Date.parse(iso); return Number.isFinite(ms) ? new Date(ms + 9 * 3600e3).toISOString().slice(0, 10) : ""; };
   function ticketsView() {
     const own = myTickets.map((tk) => {
       const stCls = tk.status === "有効" ? "" : " gray";
@@ -425,8 +428,11 @@
     }).join("");
     const plans = ticketPlans.map((pl) =>
       '<div class="card">' +
-      '<div class="rowline"><span class="when">' + esc(pl.name) + '</span><span><b>' + pl.price.toLocaleString("ja-JP") + "円</b></span></div>" +
-      '<div class="rowline"><span class="k">' + pl.uses + "回分／有効期限は購入日から1年間</span></div>" +
+      '<div class="rowline"><span class="when">' + esc(pl.name) + "</span><span>" +
+      (pl.regular_price > pl.price ? '<s style="color:#999;margin-right:6px">' + pl.regular_price.toLocaleString("ja-JP") + "円</s>" : "") +
+      "<b>" + pl.price.toLocaleString("ja-JP") + "円</b></span></div>" +
+      '<div class="rowline"><span class="k">' + pl.uses + "回分／有効期限は購入日から" + esc(pl.valid_label || "1年間") + "</span></div>" +
+      (pl.menu_names && pl.menu_names.length ? '<div class="rowline"><span class="k">対象メニュー：' + esc(pl.menu_names.join("・")) + "</span></div>" : "") +
       '<p class="empty" style="margin:6px 0">' + esc(pl.description || "") + "</p>" +
       '<div class="btnrow"><button type="button" class="gold" style="border:0;cursor:pointer" data-buy="' + esc(pl.id) + '">この回数券を購入</button></div>' +
       "</div>").join("");
@@ -435,7 +441,7 @@
     return '<div class="card"><h2>保有中の回数券</h2>' +
       (own || '<p class="empty">保有中の回数券はありません。</p>') + "</div>" +
       '<div class="card"><h2>回数券のご購入</h2>' +
-      '<p class="empty" style="margin:0 0 8px">お支払いは店頭にて承ります。ご予約時に「回数券を使用する」を選ぶと、1回のご予約で1回分を使用します。有効期限はどの券も購入日から1年間です。</p>' +
+      '<p class="empty" style="margin:0 0 8px">' + esc(ticketNote) + "</p>" +
       (plans || '<p class="empty">現在販売中の回数券はありません。</p>') + "</div>";
   }
 
@@ -480,7 +486,7 @@
       return;
     }
     if (e.target.closest("#mp-logout")) {
-      try { localStorage.removeItem(MYKEY); } catch {}
+      try { localStorage.removeItem(MYKEY); localStorage.removeItem(TKKEY); } catch {}
       if (window.CNMember) window.CNMember.logout();
       else { try { await fetch("/api/member/logout", { method: "POST", credentials: "same-origin" }); } catch {} location.href = "/"; }
       return;

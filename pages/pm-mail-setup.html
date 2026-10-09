@@ -157,7 +157,10 @@
 
   function showStatus(j) {
     const st = $("status");
-    if (j.via === "relay-admin" || j.via === "relay-env") {
+    if (j.via === "file") {
+      st.className = "status ok";
+      st.innerHTML = "<b>✓ 手元の mail-config.json の設定で送信しています（このパソコンで動かしている場合）。</b>";
+    } else if (j.via === "relay-admin" || j.via === "relay-env") {
       st.className = "status ok";
       st.innerHTML = "<b>✓ 設定済み：メールはGoogleの送信中継から送られます。</b>" +
         (j.lastRealSent ? "<small>最後に送信したメール：" + fmt(j.lastRealSent) + "</small>" : "") +
@@ -175,7 +178,7 @@
     const r = await fetch("/api/demo/mail-relay", { cache: "no-store" });
     if (r.status === 401 || r.status === 403) {
       $("status").className = "status ng";
-      $("status").textContent = "この設定はマネージャー以上のアカウントで使えます。";
+      $("status").textContent = "この設定は管理者のアカウントだけが使えます（すべてのメールの送り先になるため）。";
       return;
     }
     info = await r.json();
@@ -215,9 +218,11 @@
       const j = await r.json();
       if (!r.ok) throw new Error(j.error === "badUrl" ? "URLの形式が正しくありません" : (j.error || "HTTP " + r.status));
       info = j; showStatus(j);
+      const other = j.via !== "relay-admin"
+        ? '<small class="warnline">※ ただし、' + (j.via === "relay-env" ? "Render の環境変数 MAIL_RELAY_URL" : "手元の mail-config.json") + " の設定が優先されているため、実際のメールはここで登録した中継からは送られません。</small>" : "";
       if (j.test && j.test.ok) {
         out.innerHTML = '<div class="status ok"><b>✓ 登録しました。テストメールを ' + esc(j.test.to) + ' に送りました。</b>' +
-          "<small>メールが届いていれば設定は完了です（届かないときは迷惑メールフォルダも見てください）。これからの予約完了・リマインド・店舗への通知は、このGmailから送られます。</small></div>";
+          "<small>メールが届いていれば設定は完了です（届かないときは迷惑メールフォルダも見てください）。これからの予約完了・リマインド・店舗への通知は、このGmailから送られます。</small>" + other + "</div>";
       } else {
         const m = String((j.test && j.test.error) || "");
         out.innerHTML = '<div class="status ng"><b>URLは登録しましたが、テストメールを送れませんでした。</b><small>理由：' + esc(m) + "</small>" +

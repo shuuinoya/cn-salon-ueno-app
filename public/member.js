@@ -83,7 +83,7 @@
   function refresh() {
     CNMember.ready = fetch("/api/member/me", { cache: "no-store", credentials: "same-origin" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((j) => { CNMember.data = j; CNMember.me = j ? j.member : null; return CNMember.me; })
+      .then((j) => { CNMember.data = j && j.member ? j : null; CNMember.me = j && j.member ? j.member : null; return CNMember.me; })
       .catch(() => null);
     return CNMember.ready;
   }
@@ -326,7 +326,7 @@
   async function logout() {
     try { await fetch("/api/member/logout", { method: "POST", credentials: "same-origin" }); } catch {}
     // このブラウザに記録した予約（メールのリンク等から開いたもの）も表示をやめる
-    try { localStorage.removeItem("cn-mypage"); } catch {}
+    try { localStorage.removeItem("cn-mypage"); localStorage.removeItem("cn-tickets"); } catch {}
     CNMember.me = null; CNMember.data = null;
     location.href = "/";
   }
@@ -337,6 +337,8 @@
   document.addEventListener("click", (e) => {
     const a = e.target.closest("a.login-button");
     if (!a) return;
+    // ⌘／Ctrl＋クリック・中ボタン（新しいタブで開く）は、ログイン中ならリンク先（/mypage）をそのまま開かせる
+    if (hasMypage() && (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1)) { a.setAttribute("href", "/mypage"); return; }
     // 予約サイトの画面部品はボタンの元のリンク先（/login）へ移動してしまうため、ここで行き先を決める
     e.preventDefault();
     e.stopPropagation();

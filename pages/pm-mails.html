@@ -268,7 +268,8 @@
     e.target.disabled = true;
     const r = await fetch("/api/demo/mails", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "resend", id }) });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) window.alert({ alreadyResent: "このメールはすでに再送しています。", notFailed: "送信失敗のメールだけ再送できます。", hasSecret: "パスワードを含むメールは再送できません。" }[j.error] || "再送できませんでした（マネージャー以上の権限が必要です）。");
+    if (!r.ok) window.alert({ alreadyResent: "このメールはすでに再送しています。", notFailed: "送信失敗のメールだけ再送できます。", hasSecret: "パスワードを含むメールは再送できません。",
+      bookingGone: "予約が見つからないため再送できません。", bookingChanged: "予約の状態が変わった（取消など）ため、このメールは再送できません。", cannotResend: "このメールは再送できません。" }[j.error] || "再送できませんでした（マネージャー以上の権限が必要です）。");
     load();
   });
 
