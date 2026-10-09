@@ -2702,11 +2702,32 @@
     const kick = () => { clearTimeout(syncTimer); syncTimer = setTimeout(doSync, 250); };
     window.__pmKickSync = kick;
     setInterval(() => { if (pendingSync) doSync(); }, 1000);
+    // リアルタイム通知が届かない接続（例：Cloudflareの無料トンネルはSSE非対応）では、
+    // 10秒ごとに「表示中の日の台帳が変わったか」を確認する方式に自動で切り替える
+    let sseOk = false, pollTimer = 0;
+    const startPolling = () => {
+      if (pollTimer) return;
+      let last = null;
+      pollTimer = setInterval(async () => {
+        if (document.hidden) return;
+        try {
+          const d = ledgerDate();
+          const j = await (await fetch("/api/demo/schedule?date=" + d, { cache: "no-store" })).json();
+          const day = (j.days || []).find((x) => x.date === d);
+          const v = d + ":" + (day ? day.version : "") + ":" + (j.bookings || []).length;
+          if (last !== null && v !== last && last.startsWith(d + ":")) kick();
+          last = v;
+        } catch {}
+        window.__pmCheckNewBookings?.(); // 別の日の新しい予約の通知
+      }, 10000);
+    };
     try {
       const es = new EventSource("/api/demo/events");
-      es.onmessage = () => { kick(); if (window.__pmCheckNewBookings) setTimeout(window.__pmCheckNewBookings, 400); };
+      es.onmessage = () => { sseOk = true; kick(); if (window.__pmCheckNewBookings) setTimeout(window.__pmCheckNewBookings, 400); };
       es.onopen = kick; // 再接続時は必ず最新へ再同期（切断中の変更を取りこぼさない）
-    } catch {}
+      // サーバーは接続した直後に必ず1通送るため、10秒たっても何も届かなければ通知が使えない接続と判断する
+      setTimeout(() => { if (!sseOk) { try { es.close(); } catch {} startPolling(); } }, 10000);
+    } catch { startPolling(); }
     document.addEventListener("visibilitychange", () => { if (!document.hidden) { kick(); window.__pmCheckNewBookings?.(); } });
   }
 
