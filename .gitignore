@@ -3,3 +3,4 @@ data/
 mail-config.json
 tls/
 tools/bin/cloudflared
+tools/mac-production.env

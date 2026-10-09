@@ -177,10 +177,14 @@ sseKeepAlive.unref?.();
 //   MAIL_SEND_TO_ALL=1 … お客様を含むすべての宛先へ実際に送る（未設定なら MAIL_ALLOW_TO の宛先だけ）
 //   MAIL_ALLOW_TO=a@x.com,b@y.com … 実送信してよい宛先（テスト用）
 function loadMailConfig() {
-  try {
-    const c = JSON.parse(fs.readFileSync(path.join(__dirname, "mail-config.json"), "utf8"));
-    if (c && c.enabled && c.host && c.user && Array.isArray(c.allowTo)) return c;
-  } catch {}
+  // 手元の開発用設定（mail-config.json）は、本番モード（Render・このMacでの本番運用）では使わない
+  // （開発用は許可した宛先にしか送らないため、本番で使うとお客様・店舗にメールが届かなくなる）
+  if (!IS_CLOUD) {
+    try {
+      const c = JSON.parse(fs.readFileSync(path.join(__dirname, "mail-config.json"), "utf8"));
+      if (c && c.enabled && c.host && c.user && Array.isArray(c.allowTo)) return c;
+    } catch {}
+  }
   const e = process.env;
   // Render の無料プラン等は送信用ポート（SMTP）を外部に出せないため、https で送れる
   // Google Apps Script の送信中継（MAIL_RELAY_URL＋MAIL_RELAY_SECRET）を優先して使う
