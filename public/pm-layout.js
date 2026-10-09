@@ -305,7 +305,7 @@
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 action: "lockStaff",
-                date: new Date(Date.now() + 9 * 3600e3 - 108e5).toISOString().slice(0, 10),
+                date: ledgerDate(), // 表示中の日だけ（ほかの日には反映しない）
                 staffId: cur.id,
                 locked: next,
               }),
@@ -323,9 +323,10 @@
       }
       const btn = cell.querySelector(".pm-lockbtn");
       if (btn && lockInfo) {
+        const md = ledgerDate().slice(5).replace("-", "/").replace(/^0/, "");
         btn.title = lockInfo.locked
-          ? name + " は予約受付停止中（クリックで再開）"
-          : name + " の予約受付を停止する";
+          ? name + " は " + md + " の予約受付を停止中です（指名あり・なしとも予約は入りません）。クリックで再開"
+          : name + " の " + md + " の予約受付を停止する（この日だけ。ほかの日には反映しません）";
       }
     });
 
@@ -1482,14 +1483,30 @@
         if (act === "close") {
           [...(side || document).querySelectorAll("button")]
             .find((b) => b.textContent === "×" && !b.closest("#pm-np"))?.click();
-        } else if (act === "book") btn("新規予約を入力")?.click();
+        } else if (act === "book") { if (!e.target.closest("[data-np]").disabled) btn("新規予約を入力")?.click(); }
         else if (act === "break") btn("休憩")?.click();
         else if (act === "work") btn("業務")?.click();
       });
     }
     const t = np.querySelector("#pm-np-time");
     if (t && t.textContent !== timeText) t.textContent = timeText;
+    const lockedName = window.__pmTapStaff && window.__pmLocks?.[window.__pmTapStaff]?.locked ? window.__pmTapStaff : "";
+    np.querySelectorAll('[data-np="book"]').forEach((b) => { b.disabled = !!lockedName; b.style.opacity = lockedName ? "0.4" : ""; });
+    let note = np.querySelector(".pm-np-locked");
+    if (lockedName && !note) {
+      note = document.createElement("p");
+      note.className = "pm-np-locked";
+      np.querySelector(".pm-np-gender")?.after(note);
+    }
+    if (note) {
+      if (lockedName) note.textContent = lockedName + " はこの日、鍵（予約受付停止）のため予約は入れられません（指名あり・なしとも）。休憩・業務は登録できます。";
+      else note.remove();
+    }
   }
+  document.addEventListener("click", (e) => {
+    const row = e.target.closest(".ledger-row");
+    if (row && e.target.closest(".ledger-track")) window.__pmTapStaff = row.querySelector(".ledger-staff-cell b")?.textContent || "";
+  }, true);
 
   // お会計（精算）モーダル：本物のPeakManagerと同じ構成
   function openCheckout() {
@@ -2613,14 +2630,20 @@
     URL.revokeObjectURL(a.href);
   }
 
-  // 鍵（予約受付停止）状態の取得。3秒キャッシュで管理画面と予約サイトに追従する。
+  // 鍵（予約受付停止）状態の取得。鍵は日ごと（その日だけ有効）なので、台帳に表示中の日の状態を取る。
+  // 3秒キャッシュ（表示する日を変えたらすぐ取り直す）で管理画面と予約サイトに追従する。
+  const ledgerDate = () => document.querySelector(".ledger-date-trigger time")?.getAttribute("datetime")
+    || new Date(Date.now() + 9 * 3600e3 - 108e5).toISOString().slice(0, 10);
   async function refreshLocks(force) {
-    const now = Date.now();
-    if (!force && window.__pmLocksAt && now - window.__pmLocksAt < 3000) return;
+    const now = Date.now(), d0 = ledgerDate();
+    if (!force && window.__pmLocksAt && now - window.__pmLocksAt < 3000 && window.__pmLocksFor === d0) return;
     window.__pmLocksAt = now;
+    if (window.__pmLocksFor !== d0) window.__pmLocks = {}; // 別の日の鍵の状態を表示しない
+    window.__pmLocksFor = d0;
     try {
-      const r = await fetch("/api/demo/locks", { cache: "no-store" });
+      const r = await fetch("/api/demo/locks?date=" + d0, { cache: "no-store" });
       const d = await r.json();
+      if (window.__pmLocksFor !== d0) return; // 取得中に表示する日が変わった
       const map = {};
       for (const l of d.locks) map[l.name] = l;
       window.__pmLocks = map;

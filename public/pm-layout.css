@@ -1895,3 +1895,6 @@ main.ledger-app .ledger-row > .ledger-staff-cell { position: sticky; left: 0; }
 
 /* 入力中のため台帳の更新を保留しているときのお知らせ */
 #pm-sync-pending { position: fixed; left: 50%; bottom: 74px; transform: translateX(-50%); z-index: 1200; background: #e8514d; color: #fff; border: 0; border-radius: 18px; padding: 8px 16px; font: inherit; font-size: 13px; font-weight: 700; box-shadow: 0 4px 14px rgb(0 0 0 / 0.25); cursor: pointer; max-width: calc(100vw - 32px); }
+
+/* 鍵（予約受付停止）の日に空き枠をタップしたときの案内 */
+#pm-np .pm-np-locked { margin: 6px 0 2px; padding: 6px 9px; background: #e2eefc; border: 1px solid #9dbbe6; border-radius: 4px; color: #1f4f8a; font-size: 12px; line-height: 1.6; }

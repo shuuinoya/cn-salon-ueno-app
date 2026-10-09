@@ -469,6 +469,11 @@ const dayStartMs = (date) => Date.parse(date + "T00:00:00+09:00");
 const minToMs = (date, min) => dayStartMs(date) + min * 60000;
 const msToMin = (date, ms) => Math.round((ms - dayStartMs(date)) / 60000);
 const todayJst = () => new Date(Date.now() + 32400000 - 10800000).toISOString().slice(0, 10); // 3時切替
+// 鍵（予約受付停止）はその日だけ有効。ほかの日の予約受付には影響しない
+function staffLockedOn(staffId, date) {
+  const d = state.days.get(date);
+  return !!(d && Array.isArray(d.locked) && d.locked.includes(staffId));
+}
 const addDays = (date, n) => new Date(Date.parse(date + "T00:00:00Z") + n * 86400000).toISOString().slice(0, 10);
 
 // 日付文字列から決まる簡易乱数（毎回同じ架空データを生成するため）
@@ -634,6 +639,14 @@ const persistReady = (() => {
       for (const m of state.mails || []) {
         if (m.kind === "store" && m.status === "pending" && m.to === "info@cn-salon-ueno.example.jp") m.to = storeMail();
       }
+      // 以前の版の鍵（スタッフごとに全日共通）は、今日（営業日）だけの鍵に移す（ほかの日の予約受付を止めない）
+      for (const st of state.staff) {
+        if (!st.locked) continue;
+        const day = ensureDay(todayJst());
+        day.locked = [...new Set([...(Array.isArray(day.locked) ? day.locked : []), st.id])];
+        st.locked = 0;
+        console.log(`鍵を今日だけに移しました: ${st.name}`);
+      }
       // 既存プランに利用条件・復活条件の初期値を付ける（標準の5・10・20回券は同じ組）
       let sortN = 0;
       for (const p2 of state.ticketPlans.values()) {
@@ -746,7 +759,7 @@ function getSchedule(date) {
   }
   const ev = ensureEvents(date);
   return {
-    staff: [...state.staff].sort((a, b) => a.sort_order - b.sort_order),
+    staff: [...state.staff].sort((a, b) => a.sort_order - b.sort_order).map((st) => ({ ...st, locked: staffLockedOn(st.id, date) ? 1 : 0 })),
     shifts,
     bookings: ev.bookings,
     blocks: ev.blocks,
@@ -856,7 +869,7 @@ function postSchedule(body) {
       const mvTarget = state.staff.find((s) => s.id === staffId);
       if (!mvTarget) throw err(400, "invalid");
       if (mvTarget.active !== 1) throw err(409, "staffUnavailable"); // 退職・停止中には移せない
-      if (mvTarget.locked) throw err(409, "soldOut");            // 鍵中のスタッフには入れられない
+      if (staffLockedOn(staffId, date)) throw err(409, "staffLocked"); // その日に鍵（予約受付停止）のスタッフには入れられない
       if (!staffCanDo(mvTarget, bk.course)) throw err(409, "soldOut"); // 対応可能メニュー外は不可
       const mvGender = courseGender(bk.course);
       if (mvGender !== "none" && mvTarget.gender !== mvGender) throw err(409, "soldOut");
@@ -892,7 +905,7 @@ function postSchedule(body) {
       const c = getCourse(course);
       const cbTarget = state.staff.find((s) => s.id === staffId);
       if (!consent || !c || !cbTarget) throw err(400, "invalid");
-      if (cbTarget.locked) throw err(409, "soldOut");            // 鍵中のスタッフには入れられない
+      if (staffLockedOn(staffId, date)) throw err(409, "staffLocked"); // その日に鍵（予約受付停止）のスタッフには入れられない
       if (!staffCanDo(cbTarget, course)) throw err(409, "soldOut"); // 対応可能メニュー外は不可
       const cbGender = courseGender(course);
       if (cbGender !== "none" && cbTarget.gender !== cbGender) throw err(409, "soldOut");
@@ -976,7 +989,7 @@ function postSchedule(body) {
         name: String(p.name),
         gender: p.gender,
         active: p.active ? 1 : 0,
-        locked: prevStaff?.locked ?? 0,
+        locked: 0, // 鍵は日ごと（days[date].locked）
         courses: JSON.stringify(p.allCourses ? [] : p.courses || []),
         profile: JSON.stringify(profile),
         sort_order: Number(p.sortOrder) || 0,
@@ -1046,9 +1059,13 @@ function postSchedule(body) {
     case "lockStaff": {
       const st = state.staff.find((x) => x.id === body.staffId);
       if (!st) throw err(400, "invalid");
-      st.locked = body.locked ? 1 : 0;
+      // 表示中の日だけ鍵をかける／外す（ほかの日には反映しない）
+      const day = ensureDay(date);
+      const list = (Array.isArray(day.locked) ? day.locked : []).filter((x) => x !== st.id);
+      if (body.locked) list.push(st.id);
+      day.locked = list;
       bump();
-      return { ok: true, locked: st.locked };
+      return { ok: true, locked: body.locked ? 1 : 0, date };
     }
     case "retryMail": {
       // 送信失敗したメールを再送信キューへ戻す
@@ -2271,7 +2288,7 @@ function profileOf(st) {
 // 指名候補スタッフ一覧（受付中・個人指名あり・コース対応・性別条件）
 function nominatableStaff(courseId, genderPref) {
   return state.staff
-    .filter((st) => st.active === 1 && !st.locked && staffCanDo(st, courseId))
+    .filter((st) => st.active === 1 && staffCanDo(st, courseId))
     .filter((st) => genderPref === "none" || st.gender === genderPref)
     .filter((st) => profileOf(st).personalNomination)
     .sort((a, b) => a.sort_order - b.sort_order)
@@ -2301,7 +2318,7 @@ function freeStaffIds(date, startMin, endMin, courseId, genderPref, ignoreBookin
     return items.some((it) => msToMin(date, it.start_at) < endMin && msToMin(date, it.end_at) > startMin);
   };
   return state.staff
-    .filter((st) => st.active === 1 && !st.locked && staffCanDo(st, courseId))
+    .filter((st) => st.active === 1 && !staffLockedOn(st.id, date) && staffCanDo(st, courseId)) // その日に鍵のスタッフは指名あり・なしとも不可
     .filter((st) => genderPref === "none" || st.gender === genderPref)
     .filter((st) => {
       const sh = shifts.find((x) => x.staff_id === st.id);
@@ -2365,7 +2382,7 @@ function hpNotify(b, via) {
   const course = [...courseStore.values()].find((c) => c.name === menu) || null;
   const gender = course ? courseGender(course.id) : (menu.includes("女性") ? "female" : menu.includes("男性") ? "male" : "none");
   let candidates = state.staff
-    .filter((st) => st.active === 1 && !st.locked)
+    .filter((st) => st.active === 1 && !staffLockedOn(st.id, date))
     .filter((st) => (course ? staffCanDo(st, course.id) : true))
     .filter((st) => gender === "none" || st.gender === gender)
     .filter((st) => withinShift(date, st.id, start, end) && !overlaps(date, st.id, start, end))
@@ -3455,7 +3472,8 @@ function handleDemoApi(req, res, url) {
   }
 
   if (url.pathname === "/api/demo/locks" && (req.method === "GET" || req.method === "HEAD")) {
-    const locks = state.staff.map((st) => ({ id: st.id, name: st.name, locked: st.locked ? 1 : 0 }));
+    const ld = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get("date") || "") ? url.searchParams.get("date") : todayJst();
+    const locks = state.staff.map((st) => ({ id: st.id, name: st.name, locked: staffLockedOn(st.id, ld) ? 1 : 0, date: ld }));
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
     res.end(req.method === "HEAD" ? undefined : JSON.stringify({ locks }));
     return true;
