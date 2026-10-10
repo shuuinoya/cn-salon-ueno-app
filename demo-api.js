@@ -2918,10 +2918,12 @@ function handleDemoApi(req, res, url) {
       // 日本語入力の全角＠は半角@として扱う（IMEの打ち間違いでロックさせない）
       const jz = (v) => String(v || "").replace(/＠/g, "@").replace(/　/g, " ").trim();
       const user = jz(b.user).slice(0, 40);
-      const ip = req.socket.remoteAddress || "";
-      // 連続失敗によるロック（総当たり対策）
+      const ip = req.clientIp || req.socket.remoteAddress || "";
+      // 連続失敗によるロック（総当たり対策）。インターネットからの試行だけが対象：
+      // お店の端末（Tailscaleでつないだ端末）からは、他人がロックさせていてもログインできる
       const lock = state.loginFails.get(user);
-      if (lock && lock.until > Date.now()) {
+      const guarded = req.fromInternet !== false;
+      if (guarded && lock && lock.until > Date.now()) {
         authLogPush({ kind: "login", user, ok: false, reason: "locked", ip });
         res.writeHead(429, { "Content-Type": "application/json" });
         return res.end(JSON.stringify({ error: "tooManyAttempts", retry: Math.ceil((lock.until - Date.now()) / 1000) }));
@@ -2940,8 +2942,10 @@ function handleDemoApi(req, res, url) {
         });
         res.end(JSON.stringify({ ok: true, role: acc.role, name: acc.name }));
       } else {
+        // 続けて間違えるほど長くロック：5回で1分・10回で15分・20回で1時間
         const n = (lock ? lock.n : 0) + 1;
-        state.loginFails.set(user, { n, until: n >= 5 ? Date.now() + 60000 : 0 });
+        const wait = n >= 20 ? 3600e3 : n >= 10 ? 15 * 60e3 : n >= 5 ? 60e3 : 0;
+        state.loginFails.set(user, { n, until: wait ? Date.now() + wait : 0 });
         authLogPush({ kind: "login", user, ok: false, ip });
         res.writeHead(401, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "invalidLogin" }));
@@ -2993,7 +2997,7 @@ function handleDemoApi(req, res, url) {
     }
     if (need && !roleAtLeast(req, need)) {
       const a = sessionAccount(req);
-      authLogPush({ kind: "api", user: a ? a.user : "", ok: false, path: P, ip: req.socket.remoteAddress || "" });
+      authLogPush({ kind: "api", user: a ? a.user : "", ok: false, path: P, ip: req.clientIp || req.socket.remoteAddress || "" });
       denyApi(req, res);
       return true;
     }
@@ -3763,7 +3767,7 @@ function handleDemoApi(req, res, url) {
     readJson(req, res, 1e5, (b) => {
       const email = normEmail(b.email);
       const pass = String(b.pass || "").replace(/＠/g, "@").replace(/　/g, " ").trim();
-      const ip = req.socket.remoteAddress || "";
+      const ip = req.clientIp || req.socket.remoteAddress || "";
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw err(400, "badEmail");
       const lock = state.memberFails.get(email);
       if (lock && lock.until > Date.now()) {
@@ -3781,14 +3785,14 @@ function handleDemoApi(req, res, url) {
       }
       if (!m && mode === "login") {
         const n = (lock ? lock.n : 0) + 1;
-        state.memberFails.set(email, { n, until: n >= 5 ? Date.now() + 60000 : 0 });
+        state.memberFails.set(email, { n, until: n >= 20 ? Date.now() + 3600e3 : n >= 10 ? Date.now() + 15 * 60e3 : n >= 5 ? Date.now() + 60000 : 0 }); // 5回で1分・10回で15分・20回で1時間
         res.writeHead(401, { "Content-Type": "application/json" });
         return res.end(JSON.stringify({ error: "invalidLogin" }));
       }
       if (m) {
         if (m.pass !== hashPass(pass)) {
           const n = (lock ? lock.n : 0) + 1;
-          state.memberFails.set(email, { n, until: n >= 5 ? Date.now() + 60000 : 0 });
+          state.memberFails.set(email, { n, until: n >= 20 ? Date.now() + 3600e3 : n >= 10 ? Date.now() + 15 * 60e3 : n >= 5 ? Date.now() + 60000 : 0 }); // 5回で1分・10回で15分・20回で1時間
           authLogPush({ kind: "member", user: email, ok: false, ip });
           res.writeHead(401, { "Content-Type": "application/json" });
           return res.end(JSON.stringify({ error: "invalidLogin" }));
@@ -3880,7 +3884,7 @@ function handleDemoApi(req, res, url) {
       state.memberFails.delete(m.email);
       const token = crypto.randomBytes(24).toString("hex");
       state.memberSessions.set(token, { email: m.email, created: Date.now() });
-      authLogPush({ kind: "member", user: m.email, ok: true, ip: req.socket.remoteAddress || "", reset: true });
+      authLogPush({ kind: "member", user: m.email, ok: true, ip: req.clientIp || req.socket.remoteAddress || "", reset: true });
       queueMemberPassChangedMail(m, "reset");
       res.writeHead(200, { "Content-Type": "application/json", "Set-Cookie": `cn_member=${token}; ${MEMBER_COOKIE_FLAGS}` });
       res.end(JSON.stringify({ ok: true, member: memberPublic(m) }));
@@ -4204,7 +4208,7 @@ function handleDemoApi(req, res, url) {
         // 予約・シフト・受付停止などの日常操作はスタッフ権限でも可能
         if ((body.action === "staff" || body.action === "staffDelete") && !roleAtLeast(req, "manager")) {
           const a = sessionAccount(req);
-          authLogPush({ kind: "api", user: a ? a.user : "", ok: false, path: "/api/demo/schedule#" + body.action, ip: req.socket.remoteAddress || "" });
+          authLogPush({ kind: "api", user: a ? a.user : "", ok: false, path: "/api/demo/schedule#" + body.action, ip: req.clientIp || req.socket.remoteAddress || "" });
           denyApi(req, res);
           return;
         }

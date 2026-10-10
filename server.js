@@ -376,7 +376,12 @@ const handler = (req, res) => {
       p === "/demo/admin" || p.startsWith("/api/partner/") ||
       (p.startsWith("/api/demo/") && !publicDemoGet);
     // 本番ホスティングでは管理画面もインターネットから使う（IPではなく認証が守る）。
-    // ローカル運用（店のMac）では従来どおり店内ネットワーク限定
+    // ローカル運用（店のMac）では従来どおり店内ネットワーク限定。
+    // ADMIN_FROM_INTERNET=0（Tailscale公開時）：管理画面はお店の端末（Tailscaleでつないだ端末）からだけ
+    if (CLOUD && TRUST_PROXY === "tailscale" && process.env.ADMIN_FROM_INTERNET === "0" && req.headers["tailscale-funnel-request"] && adminSurface) {
+      res.writeHead(403, { "Content-Type": "text/html; charset=utf-8" });
+      return res.end("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>管理画面</title><p style='font-family:sans-serif;padding:24px'>管理画面は、お店の端末（Tailscaleでつないだ端末）からだけ開けます。</p>");
+    }
     if (!CLOUD && !raPrivate && adminSurface) {
       res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
       return res.end("Forbidden");
@@ -418,6 +423,17 @@ const handler = (req, res) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "no-referrer");
+  // 追加の守り：他サイトへの埋め込み禁止・<base>の差し替え禁止・プラグイン禁止・フォームの送り先は自サイトのみ
+  // （スクリプトの読み込み元は制限しない＝保存版の画面がそのまま動く）
+  res.setHeader("Content-Security-Policy", "frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()");
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  res.setHeader("X-Permitted-Cross-Domain-Policies", "none");
+  // 本番（https）では、以後は必ず暗号化した接続で開かせる（1年間）
+  if (CLOUD) res.setHeader("Strict-Transport-Security", "max-age=31536000");
+  // 実際の接続元（ログイン記録などで使う）と、インターネットからのアクセスか（Tailscale公開時は Funnel 経由かで判定）
+  req.clientIp = srcIp;
+  req.fromInternet = TRUST_PROXY === "tailscale" ? !!req.headers["tailscale-funnel-request"] : !raPrivate;
   // 名前ホスト（数字なしURL）のトップは、それぞれの入口ページを表示する
   const hostName = (req.headers.host || "").toLowerCase().replace(/:\d+$/, "");
 
