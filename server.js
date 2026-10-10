@@ -204,6 +204,7 @@ const PRIVATE_IPS = "10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|192\\.168\\.\\d{1,3}\\.
 // 本番ホスティング（Render/Fly/Railway等）での実行か。管理画面もインターネットから
 // 利用できるようになる（守りはIPではなく、ログイン＋権限＋ロック＋流量制限が担う）
 const CLOUD = require("./persist").isCloud();
+const TRUST_PROXY = process.env.TRUST_PROXY || ""; // "tailscale"：Tailscale Funnel で公開しているとき
 // 本番の公開ドメイン（PUBLIC_HOST=example.com,www.example.com のように指定。
 // ホスティング各社が自動設定するドメインも自動で許可する）
 const PUBLIC_HOSTS = [
@@ -355,8 +356,12 @@ const handler = (req, res) => {
   const ra = (req.socket.remoteAddress || "").replace(/^::ffff:/, "");
   // トンネル（Cloudflare）経由はソケット上ループバックでも「インターネットのお客様」。
   // 実IPは転送ヘッダから取り、管理系の遮断・流量制限はその実IPで判定する
-  const fwd = String(req.headers["cf-connecting-ip"] ||
-    String(req.headers["x-forwarded-for"] || "").split(",")[0] || "").trim();
+  // ・Render／Cloudflareトンネル：Cloudflareが必ず上書きする CF-Connecting-IP
+  // ・Tailscale で公開（TRUST_PROXY=tailscale）：Tailscaleが必ず上書きする X-Forwarded-For だけを使う。
+  //   CF-Connecting-IP はお客様側で自由に付けられ、そのまま届くため使わない（流量制限のすり抜け防止）
+  const fwd = TRUST_PROXY === "tailscale"
+    ? String(req.headers["x-forwarded-for"] || "").split(",").pop().trim()
+    : String(req.headers["cf-connecting-ip"] || String(req.headers["x-forwarded-for"] || "").split(",")[0] || "").trim();
   const raLoopback = !fwd && (ra === "127.0.0.1" || ra === "::1");
   const raPrivate = raLoopback || (!fwd && (
     /^(10\.|192\.168\.|169\.254\.)/.test(ra) || /^172\.(1[6-9]|2\d|3[01])\./.test(ra) ||

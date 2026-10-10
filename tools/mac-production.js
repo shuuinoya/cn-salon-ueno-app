@@ -139,6 +139,7 @@ function startServer(show) {
     PUBLIC_HOST: publicUrl.replace(/^https:\/\//, ""),
     DEMO_DATA: path.join(ROOT, "data", "mac-production-state.json"),
     DEMO_TUNNEL: "0",
+    ...(fileEnv.PUBLIC_URL ? { TRUST_PROXY: "tailscale" } : {}), // 接続元は Tailscale が付ける情報だけを信用する
   };
   srv = spawn(process.execPath, ["server.js"], { cwd: ROOT, env, stdio: ["ignore", "pipe", "pipe"] });
   srv.stdout.on("data", (b) => process.stdout.write(String(b).replace(/^/gm, "  [サーバー] ")));
