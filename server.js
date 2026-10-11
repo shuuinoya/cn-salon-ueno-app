@@ -162,6 +162,8 @@ function sendFile(res, file, status, type, head, url, req) {
       // ホスティングの通信量（Render無料プランは月5GB）を節約する。HTML・RSCペイロード・JSの両方で同じく書き換えるので、
       // 画面の組み立て（ハイドレーション）とも食い違わない。環境変数 IMAGE_CDN を空にすると自サーバーから配信
       if (IMAGE_CDN) text = text.split('"/images/').join('"' + IMAGE_CDN + "/images/").split("`/images/").join("`" + IMAGE_CDN + "/images/");
+      // 店舗情報の「ホームページ」は、今このサイトを公開している住所を表示する（Render以外で動かしているときも正しく）
+      if (PUBLIC_HOSTS[0] && PUBLIC_HOSTS[0] !== "cn-salon-ueno.onrender.com") text = text.split("https://cn-salon-ueno.onrender.com").join("https://" + PUBLIC_HOSTS[0]);
       body = Buffer.from(text);
     }
     if (!res.getHeader("Cache-Control")) res.setHeader("Cache-Control", "no-cache");

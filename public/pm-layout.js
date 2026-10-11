@@ -208,9 +208,26 @@
         const s = document.createElement("span");
         s.id = "pm-alert";
         s.className = "pm-alert";
-        s.textContent = "3862";
+        s.textContent = "";
         brand.insertAdjacentElement("beforebegin", s);
         s.insertAdjacentElement("beforebegin", w);
+        // 以前は見た目だけの固定の数字だった。実際に対応が必要な件数（送信失敗のメール）を出し、0件なら隠す
+        w.hidden = s.hidden = true;
+        const open = () => { location.href = "/admin/mails"; };
+        for (const el of [w, s]) { el.style.cursor = "pointer"; el.addEventListener("click", open); }
+        const refreshAlerts = async () => {
+          if (document.hidden) return;
+          try {
+            const j = await (await fetch("/api/demo/alerts", { cache: "no-store" })).json();
+            const n = j.failedMails || 0;
+            w.hidden = s.hidden = !n;
+            s.textContent = n ? String(n) : "";
+            w.title = s.title = n ? "送信に失敗したメールが" + n + "通あります（押すとメール管理を開きます）" : "";
+          } catch {}
+        };
+        refreshAlerts();
+        setInterval(refreshAlerts, 60000);
+        window.__pmRefreshAlerts = refreshAlerts;
       }
       if (brand.textContent !== "CN He...") brand.textContent = "CN He...";
       // クリックで「ログアウト」メニューを開閉（本物と同じ挙動）
@@ -2695,6 +2712,7 @@
       }
       refreshSched(true).then(decorateEvents);
       refreshLocks(true);
+      window.__pmRefreshAlerts?.();
       refreshShop(true);
       window.__pmCoursesAt = 0;
       prefetchCalendar();

@@ -589,6 +589,8 @@ const state = {
   memberResets: new Map(),   // sha256(token) -> {email, created, exp, used}
   // メール送信中継（Google Apps Script）。管理画面の「メール送信設定」で登録する（Renderの設定は不要）
   mailRelay: { url: "", secret: "" },
+  // 管理画面の警告バッジ：この時刻より後に送信失敗したメールだけを数える（メール管理を開くと更新＝既読）
+  mailAlertsSeenAt: 0,
 };
 
 // ---- 永続化（persist.js＝このシステムのデータベース層） ----
@@ -680,6 +682,8 @@ const persistReady = (() => {
             ? [{ days: 30, expires_at: t.remind_for_expiry, at: null, status: "legacy" }] : [];
         }
       }
+      // 警告バッジの既読時刻が無い（以前の版の）データは、いま既読にする（設定作業中の古い送信失敗で警告を出し続けない）
+      if (!loaded.data.state.mailAlertsSeenAt) state.mailAlertsSeenAt = Date.now();
       // 環境変数でパスワードが指定されている場合は、保存済みアカウントにも常に適用する
       if (process.env.ADMIN_PASS_HASH && state.accounts.has(ADMIN_ID)) {
         state.accounts.get(ADMIN_ID).pass = process.env.ADMIN_PASS_HASH;
@@ -3060,6 +3064,23 @@ function handleDemoApi(req, res, url) {
       return true;
     }
     res.writeHead(405); res.end(); return true;
+  }
+
+  // 管理画面の右上の警告バッジ：対応が必要な件数（送信に失敗して、まだ再送していないメール）
+  // メール管理を開いた（既読にした）後に失敗したものだけを数える。送信予定のメールは予定時刻に失敗するので、その時刻で比べる
+  if (url.pathname === "/api/demo/alerts" && (req.method === "GET" || req.method === "HEAD")) {
+    const seen = state.mailAlertsSeenAt || 0;
+    const failedMails = state.mails.filter((m) => m.status === "failed" && !(m.resentAs || []).length &&
+      Math.max(m.createdAt || 0, m.scheduledAt || 0) > seen).length;
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    res.end(req.method === "HEAD" ? undefined : JSON.stringify({ failedMails }));
+    return true;
+  }
+  if (url.pathname === "/api/demo/alerts" && req.method === "POST") {
+    state.mailAlertsSeenAt = Date.now();
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    res.end(JSON.stringify({ ok: true, failedMails: 0 }));
+    return true;
   }
 
   // 最近入った予約（すべての日付から、受付の新しい順）。管理画面の「新しい予約」通知に使う

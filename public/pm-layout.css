@@ -1898,3 +1898,6 @@ main.ledger-app .ledger-row > .ledger-staff-cell { position: sticky; left: 0; }
 
 /* 鍵（予約受付停止）の日に空き枠をタップしたときの案内 */
 #pm-np .pm-np-locked { margin: 6px 0 2px; padding: 6px 9px; background: #e2eefc; border: 1px solid #9dbbe6; border-radius: 4px; color: #1f4f8a; font-size: 12px; line-height: 1.6; }
+
+/* 右上の警告バッジ：0件のときは出さない */
+#pm-warn[hidden], #pm-alert[hidden] { display: none !important; }

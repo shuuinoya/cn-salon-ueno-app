@@ -310,6 +310,8 @@
     } catch {}
   }
   load();
+  // この画面を開いたら、管理画面右上の警告バッジ（送信失敗の件数）を既読にする
+  fetch("/api/demo/alerts", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }).catch(() => {});
   // 一覧は大きいため、画面を見ているときだけ30秒ごとに更新（見に戻ったときはすぐ更新）
   setInterval(() => { if (!document.hidden) load(); }, 30000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) load(); });
