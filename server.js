@@ -378,7 +378,8 @@ const handler = (req, res) => {
     // 本番ホスティングでは管理画面もインターネットから使う（IPではなく認証が守る）。
     // ローカル運用（店のMac）では従来どおり店内ネットワーク限定。
     // ADMIN_FROM_INTERNET=0（Tailscale公開時）：管理画面はお店の端末（Tailscaleでつないだ端末）からだけ
-    if (CLOUD && TRUST_PROXY === "tailscale" && process.env.ADMIN_FROM_INTERNET === "0" && req.headers["tailscale-funnel-request"] && adminSurface) {
+    if (CLOUD && TRUST_PROXY === "tailscale" && process.env.ADMIN_FROM_INTERNET === "0" && req.headers["tailscale-funnel-request"] &&
+        (adminSurface || p.toLowerCase() === "/cnsalon-board")) { // 管理画面の入口（ログイン画面）も見せない
       res.writeHead(403, { "Content-Type": "text/html; charset=utf-8" });
       return res.end("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>管理画面</title><p style='font-family:sans-serif;padding:24px'>管理画面は、お店の端末（Tailscaleでつないだ端末）からだけ開けます。</p>");
     }
