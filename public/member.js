@@ -77,7 +77,7 @@
 
   const INIT_Q = (() => { try { return new URLSearchParams(location.search); } catch { return new URLSearchParams(); } })();
   const ls = (k) => { try { return JSON.parse(localStorage.getItem(k) || "[]"); } catch { return []; } };
-  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/\'/g, "&#39;");
 
   const CNMember = window.CNMember = { me: null, data: null, ready: null, open, close, logout, refresh };
   function refresh() {

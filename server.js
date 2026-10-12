@@ -115,13 +115,15 @@ function sendFile(res, file, status, type, head, url, req) {
       // 実際のリクエストのクエリパラメータを注入しないと、確認・完了ページなどが
       // 「メニューを選択してください」表示になってしまうため、配信時に置き換える。
       if (url && isHtml) {
+        // <script> の中に入るため、< > & と改行扱いの文字は \u 表記にする（URLに </script> 等を仕込まれても実行されない）。
+        // 置き換えは関数で渡す（URL中の $' $` などが置換記号として展開されないように）
         const nav = JSON.stringify({
           pathname: url.pathname,
           searchParams: [...url.searchParams.entries()],
-        });
+        }).replace(/[<>&\u2028\u2029]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
         text = text.replace(
           /nav:\{"pathname":"[^"]*","searchParams":\[(?:\[[^\]]*\],?)*\]\}/,
-          "nav:" + nav
+          () => "nav:" + nav
         );
         // 日時選択ページ：保存HTMLの空き状況表の見出し（日付・曜日）は保存した日（9/24〜）のまま。
         // ブラウザ側は「今日（3時切替）から7日分」を描くため食い違い、Reactがエラー（#418）を出して

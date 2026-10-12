@@ -75,6 +75,11 @@
   const saveStore = (list) => { try { localStorage.setItem(MYKEY, JSON.stringify(list.slice(-20))); } catch {} };
   const origFetch = window.fetch.bind(window);
   window.fetch = async (input, init) => {
+    // 日時変更中：空き状況の問い合わせに元の予約IDを添える（元の予約の枠を空きとして表示。本人確認はサーバー側）
+    try {
+      const rs0 = typeof input === "string" && input.includes("/api/availability") && !input.includes("reschedule=") ? rescheduleId() : "";
+      if (rs0) input += (input.includes("?") ? "&" : "?") + "reschedule=" + encodeURIComponent(rs0);
+    } catch {}
     // 予約送信時：回数券が選択されていれば、リクエストに券IDとトークンを付与する
     // （残数の判定・減算はすべてサーバー側。ここは選択内容を渡すだけ）
     try {
@@ -145,7 +150,7 @@
       // ログイン中の会員：本人の回数券（トークン付き）はサーバーから直接もらう
       try {
         if (window.CNMember) await window.CNMember.ready;
-        for (const t of (window.CNMember?.data?.tickets || [])) list.push(t);
+        for (const t of (window.CNMember?.data?.tickets || [])) list.push({ ...t });
       } catch {}
       // このブラウザに記録された券（未ログインでも使える）
       const items = tkItems().filter((it) => !list.some((t) => t.id === it.id));
@@ -154,6 +159,17 @@
           const r = await origFetch("/api/tickets/mine", { method: "POST",
             headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items }), cache: "no-store" });
           for (const t of ((await r.json()).tickets || [])) list.push(t);
+        } catch {}
+      }
+      // 日時変更中：元の予約で使った回数券の1回分は戻ってくるので、その分を足して表示・選択できるようにする
+      // （最後の1回で予約した場合も同じ券で変更できる。実際の判定はサーバー側）
+      const rs = rescheduleId();
+      if (rs) {
+        try {
+          const r = await origFetch("/api/bookings?id=" + encodeURIComponent(rs), { cache: "no-store" });
+          const b = (await r.json()).booking;
+          const t = b && b.status === "confirmed" && b.ticket_id ? list.find((x) => x.id === b.ticket_id) : null;
+          if (t) { t.uses_left += 1; if (t.status === "使い切り") t.status = "有効"; }
         } catch {}
       }
       myTickets = list;
@@ -210,7 +226,7 @@
       document.head.appendChild(st);
     }
   }
-  const esc2 = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const esc2 = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/\'/g, "&#39;");
 
   // 予約フォーム：使用する回数券を選べるようにする（選択内容と残数を明示）
   async function decorateTicketPick() {

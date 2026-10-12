@@ -135,7 +135,7 @@
       return `${Number(d.slice(5, 7))}/${Number(d.slice(8))}（${WDJ[new Date(d + "T00:00:00Z").getUTCDay()]}）` +
         `${String(s.getUTCHours()).padStart(2, "0")}:${String(s.getUTCMinutes()).padStart(2, "0")}〜 ${b.name} 様`;
     };
-    const esc = (x) => String(x).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const esc = (x) => String(x).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/\'/g, "&#39;");
     t.innerHTML = `<button type="button" class="pm-toast-x" aria-label="閉じる">×</button>` +
       `<b>${list.length > 1 ? `オンライン予約が${list.length}件入りました。` : "オンライン予約が入りました。"}</b>` +
       list.slice(0, 5).map((b) => `<button type="button" class="pm-toast-bk" data-date="${esc(b.date)}" title="${esc(b.course)}">${esc(fmt(b))}${b.source === "hotpepper" ? "（ホットペッパー）" : ""}</button>`).join("") +
@@ -920,7 +920,7 @@
     const date = d.__date;
     const staffByName = {};
     for (const st of d.staff || []) staffByName[st.name] = st.id;
-    const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/\'/g, "&#39;");
     const badge = (cls, t) => '<i class="pm-bg pm-bg-' + cls + '">' + t + "</i>";
     document.querySelectorAll(".ledger-row").forEach((row) => {
       const sid = staffByName[row.querySelector(".ledger-staff-cell b")?.textContent || ""];
@@ -987,7 +987,7 @@
       (d.assignments || []).some((a) => a.booking_id === b.id && a.staff_id === sid) &&
       Math.abs(pmMin(date, b.start_at) - startMin) <= 3);
     if (!bk) return;
-    const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+    const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/\'/g, "&#39;");
     const s0 = pmMin(date, bk.start_at), e0 = pmMin(date, bk.end_at);
     const tag = bk.source === "hotpepper" ? "ホットペッパー"
       : /WEB$/.test(bk.created_label || "") ? "オンライン予約" : "";
@@ -1137,7 +1137,7 @@
       const i = dts.findIndex((d) => d.textContent === label);
       return i >= 0 ? dts[i].nextElementSibling : null;
     };
-    const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/\'/g, "&#39;");
     const ref = (val("予約ID")?.textContent || "").trim();
     const prevDay = dateISOMinus1(form.querySelector("p time")?.getAttribute("datetime") || "");
     // 台帳データから該当予約を引き当てる（予約ID・作成日時・ブースなどの実値を使う）
@@ -1536,7 +1536,7 @@
       const i = dts.findIndex((d) => d.textContent === label);
       return i >= 0 ? (dts[i].nextElementSibling?.textContent || "") : "";
     };
-    const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/\'/g, "&#39;");
     const name = val("お名前").trim() || "ゲスト";
     const menu = val("メニュー").trim();
     const reference = val("予約ID").trim();
@@ -1816,7 +1816,7 @@
     try { st = await (await fetch("/api/demo/settings", { cache: "no-store" })).json(); } catch {}
     const s = st.freeMessage || { visible: true, required: false, label: "", placeholder: "", description: "", maxLength: 2000 };
     const m = st.shopMaster || {};
-    const esc = (t) => String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    const esc = (t) => String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/\'/g, "&#39;");
     const ro = (v) => '<input type="text" value="' + esc(v) + '" readonly class="pm-sm-ro">';
     // 10:00〜27:00 を30分刻みで選ぶ時刻セレクト（値は分）
     const timeSel = (id2, cur) => '<select id="' + id2 + '">' +
@@ -1995,7 +1995,7 @@
     const close = () => wrap.remove();
     wrap.querySelector("#pm-ac-close").addEventListener("click", close);
     wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
-    const esc = (t) => String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    const esc = (t) => String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/\'/g, "&#39;");
     const ERRS = {
       badUser: "ログインIDは半角英数・-・_ の4〜20文字にしてください。",
       userExists: "そのログインIDは既に使われています。",
@@ -2110,7 +2110,7 @@
     const close = () => wrap.remove();
     wrap.querySelector("#pm-tk-close").addEventListener("click", close);
     wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
-    const esc = (t) => String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+    const esc = (t) => String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/\'/g, "&#39;");
     const jd = (v) => {
       if (!v) return "";
       const ms = typeof v === "number" ? v : Date.parse(v);

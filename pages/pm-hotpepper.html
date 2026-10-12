@@ -123,7 +123,7 @@
     if (m === 840) o.selected = true; // 14:00
     timeSel.appendChild(o);
   }
-  var esc = function (t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;"); };
+  var esc = function (t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/\'/g, "&#39;"); };
 
   function renderLog(log) {
     var box = document.getElementById("hp-log");
