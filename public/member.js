@@ -13,38 +13,10 @@
   "use strict";
   if (window.CNMember) return;
 
-  const lang = (() => { try { return String(localStorage.getItem("cn-salon-language") || "ja").slice(0, 2); } catch { return "ja"; } })();
-  const en = lang === "en";
-  const T = en ? {
-    login: "Log in", mypage: "My page", email: "Email address", pass: "Password",
-    forgot: "Forgot your password?", cancel: "Cancel",
-    toRegister: "New here? Create a free account", toRegisterShort: "Sign up (free)",
-    toLogin: "Already a member? Log in",
-    register: "Create account", registerTitle: "Sign up (free)",
-    name: "Your name", pass2: "Password (confirm)", passHint: "6 or more characters",
-    registerNote: "After signing up you will receive a confirmation email with your login ID and password. Members can buy and use multi-visit tickets from the top of the Booking and Menu pages.",
-    registered: (e) => "Your account has been created. A confirmation email has been sent to " + e + ".",
-    invalid: "The email address or password is incorrect. If you are new, please create an account.",
-    exists: "This email address is already registered. Please log in.",
-    nameReq: "Please enter your name.",
-    passMismatch: "The passwords do not match.",
-    shortPass: "Please use a password of at least 6 characters.",
-    tooMany: "Too many attempts. Please wait a minute and try again.",
-    badEmail: "Please enter a valid email address.",
-    fail: "Could not complete. Please try again later.",
-    forgotTitle: "Reset your password", resetTitle: "Set a new password", backToLogin: "Back to log in",
-    forgotLead: "Enter your registered email address. We will email you a link to set a new password (valid for 60 minutes, single use).",
-    forgotSend: "Send reset link",
-    forgotDone: (e) => "If " + e + " is registered, we have sent a password reset link. Please check your inbox (and spam folder). The link is valid for 60 minutes.",
-    resetChecking: "Checking the link…",
-    resetLead: (e) => "Set a new password for " + e + ".",
-    newPass: "New password", resetSubmit: "Change password", resetAgain: "Request a new link",
-    resetDoneMsg: "Your password has been changed. You are now logged in.",
-    resetInvalid: "This link is invalid or has already been used. Please request a new link.",
-    resetExpired: "This link has expired (valid for 60 minutes). Please request a new link.",
-    heading: "Log in", member: "Member menu", hello: (n) => (n ? n + " " : "") + "(member)",
-    tickets: "Your tickets", noTickets: "No tickets yet", left: (n) => n + " left", logout: "Log out", seeTickets: "Tickets",
-  } : {
+  // 多言語：画面の文言は日本語の原文で持ち、表示する言語の訳は共通の辞書（cn-i18n.js）から引く（8か国語）
+  const I18N = window.CNI18N || null;
+  const tr = (ja, v) => (I18N ? I18N.t(ja, v) : String(ja).replace(/\{(\w+)\}/g, (m, k) => (v && v[k] != null ? v[k] : m)));
+  const JA = {
     login: "ログイン", mypage: "マイページ", email: "メールアドレス", pass: "パスワード",
     forgot: "パスワードを忘れた方はこちら", cancel: "キャンセル",
     toRegister: "はじめての方は新規会員登録（無料）", toRegisterShort: "新規会員登録（無料）",
@@ -52,7 +24,6 @@
     register: "登録する", registerTitle: "新規会員登録（無料）",
     name: "お名前", pass2: "パスワード（確認）", passHint: "6文字以上",
     registerNote: "登録が完了すると、ログインID（メールアドレス）とパスワードを記載した「会員登録完了のお知らせ」メールをお送りします。会員様は【予約】【メニュー】ページの一番上から回数券をご購入・ご利用いただけます。",
-    registered: (e) => "会員登録が完了しました。\n「会員登録完了のお知らせ」を " + e + " にお送りしました。",
     invalid: "メールアドレスまたはパスワードが違います。はじめての方は「新規会員登録」からご登録ください。",
     exists: "このメールアドレスはすでに登録されています。ログインしてください。",
     nameReq: "お名前を入力してください。",
@@ -64,16 +35,25 @@
     forgotTitle: "パスワードの再設定", resetTitle: "新しいパスワードの設定", backToLogin: "ログイン画面に戻る",
     forgotLead: "ご登録のメールアドレスを入力してください。新しいパスワードを設定するためのURLをメールでお送りします（有効期限60分・1回のみ有効）。",
     forgotSend: "再設定用のメールを送る",
-    forgotDone: (e) => e + " がご登録のアドレスであれば、パスワード再設定用のURLをお送りしました。メールをご確認ください（届かない場合は迷惑メールフォルダもご確認ください）。URLの有効期限は60分です。",
     resetChecking: "URLを確認しています…",
-    resetLead: (e) => e + " の新しいパスワードを設定してください。",
     newPass: "新しいパスワード", resetSubmit: "パスワードを変更する", resetAgain: "再設定用のメールをもう一度送る",
     resetDoneMsg: "パスワードを変更しました。新しいパスワードでログインしています。\n変更完了のお知らせをメールでお送りしました。",
     resetInvalid: "このURLは無効か、すでに使用済みです。お手数ですが、もう一度再設定用のメールをお送りください。",
     resetExpired: "このURLは有効期限（60分）が過ぎています。お手数ですが、もう一度再設定用のメールをお送りください。",
-    heading: "ログイン", member: "会員メニュー", hello: (n) => (n ? n + " 様" : "会員様"),
-    tickets: "保有中の回数券", noTickets: "保有中の回数券はありません", left: (n) => "残り " + n + "回", logout: "ログアウト", seeTickets: "回数券を見る・購入する",
+    heading: "ログイン", member: "会員メニュー",
+    tickets: "保有中の回数券", noTickets: "保有中の回数券はありません", logout: "ログアウト", seeTickets: "回数券を見る・購入する",
   };
+  let T = {};
+  function buildT() {
+    T = {};
+    for (const k of Object.keys(JA)) T[k] = tr(JA[k]);
+    T.registered = (e) => tr("会員登録が完了しました。\n「会員登録完了のお知らせ」を {e} にお送りしました。", { e });
+    T.forgotDone = (e) => tr("{e} がご登録のアドレスであれば、パスワード再設定用のURLをお送りしました。メールをご確認ください（届かない場合は迷惑メールフォルダもご確認ください）。URLの有効期限は60分です。", { e });
+    T.resetLead = (e) => tr("{e} の新しいパスワードを設定してください。", { e });
+    T.hello = (n) => (n ? tr("{n} 様", { n }) : tr("会員様"));
+    T.left = (n) => tr("残り {n}回", { n });
+  }
+  buildT();
 
   const INIT_Q = (() => { try { return new URLSearchParams(location.search); } catch { return new URLSearchParams(); } })();
   const ls = (k) => { try { return JSON.parse(localStorage.getItem(k) || "[]"); } catch { return []; } };
@@ -413,7 +393,7 @@
       '<p class="cn-hello">' + esc(T.hello(me.name)) + "</p>" +
       (tks.length
         ? "<p style=\"margin:0 0 4px;font-size:13px;color:#555\">" + esc(T.tickets) + "</p><ul>" +
-          tks.map((t) => "<li><span>" + esc(t.plan_name) + "</span><b>" + esc(T.left(t.uses_left)) + "</b></li>").join("") + "</ul>"
+          tks.map((t) => "<li><span>" + esc(I18N ? I18N.plan(t.plan_name) : t.plan_name) + "</span><b>" + esc(T.left(t.uses_left)) + "</b></li>").join("") + "</ul>"
         : '<p class="cn-none">' + esc(T.noTickets) + "</p>") +
       '<a class="cn-mp" href="/mypage">' + esc(T.mypage) + "</a>" +
       '<a class="cn-tk" href="/mypage?tab=tickets">' + esc(T.seeTickets) + "</a>" +
@@ -446,6 +426,17 @@
         else if (q.get("login") === "1") open("login");
       }
     } catch {}
+  });
+  // 言語を切り替えたら、右上のボタン・右の列・ログイン画面をその言語で作り直す（開いているログイン画面は閉じる）
+  if (I18N) I18N.onChange(() => {
+    buildT();
+    document.querySelectorAll("a.login-button").forEach((a) => { delete a.dataset.cnState; });
+    const side = document.querySelector(".side-column > .cn-side");
+    if (side) delete side.dataset.cnState;
+    const lc = document.querySelector(".login-card");
+    if (lc && lc.dataset.cnReady) delete lc.dataset.cnReady;
+    if (document.getElementById("cn-login-ov")) close();
+    if (canTouch()) { applyHeader(); applyLoginPage(); applySide(); }
   });
   setInterval(() => { if (!canTouch()) return; applyHeader(); applyLoginPage(); applySide(); }, 700);
 })();

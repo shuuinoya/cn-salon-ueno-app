@@ -166,8 +166,18 @@
   };
   const norm = (l) => (String(l || "").toLowerCase().startsWith("zh") ? "zh" : ["en", "ko", "zh", "ja", "fr", "es", "it", "de"].includes(String(l || "").slice(0, 2)) ? String(l).slice(0, 2) : "ja");
   const q = new URLSearchParams(location.search);
-  let pageLang = norm(q.get("lang") || localStorage.getItem("fm-lang") || "ja");
+  // 表示する言語：予約サイトの「Language」で選んだ言語。選んだことがない端末（メールのリンクから開いた等）は、URLの lang・予約時の言語
+  const I18N = window.CNI18N || null;
+  const tr = (ja, v) => (I18N ? I18N.t(ja, v) : String(ja).replace(/\{(\w+)\}/g, (m, k) => (v && v[k] != null ? v[k] : m)));
+  const chosen = () => !!(I18N && I18N.chosen());
+  let pageLang = chosen() ? I18N.lang() : norm(q.get("lang") || localStorage.getItem("fm-lang") || "ja");
+  if (I18N && !chosen()) I18N.use(pageLang);
   const T = () => L[pageLang] || L.ja;
+  const plan = (n) => (I18N ? I18N.plan(n) : n);
+  const menuName = (n) => (I18N ? I18N.menu(n) : n);
+  const price = (n) => (I18N ? I18N.price(n) : n.toLocaleString("ja-JP") + "円");
+  const dateLabel = (v) => (I18N ? I18N.date(v) : String(v));
+  const joinNames = (list) => list.join(["ja", "zh", "ko"].includes(pageLang) ? "・" : ", ");
 
   const MYKEY = "cn-mypage";
   const store = () => { try { return JSON.parse(localStorage.getItem(MYKEY) || "[]"); } catch { return []; } };
@@ -267,45 +277,43 @@
       } catch {}
     }
     rows.sort((a, b) => b.bk.start - a.bk.start);
-    if (!q.get("lang") && rows[0]) pageLang = norm(localStorage.getItem("fm-lang") || rows[0].bk.language);
+    if (!chosen() && !q.get("lang") && rows[0]) { pageLang = norm(localStorage.getItem("fm-lang") || rows[0].bk.language); if (I18N) I18N.use(pageLang); }
   }
-  const changeLabel = () => ({ ja: "日時を変更", en: "Change date/time" }[pageLang] || "日時を変更");
+  const changeLabel = () => tr("日時を変更");
   function loginGate() {
-    const ja = pageLang !== "en";
-    return '<div class="card"><h2>' + (ja ? "マイページ" : "My page") + "</h2>" +
+    return '<div class="card"><h2>' + esc(tr("マイページ")) + "</h2>" +
       '<p class="empty" style="margin:0 0 12px">' +
-      (ja ? "マイページのご利用にはログインが必要です。<br>ご予約の確認・日時変更・取消、回数券のご購入・残り回数の確認ができます。<br>はじめての方は「新規会員登録（無料）」からご登録ください。"
-          : "Please log in to use My page. You can check, reschedule or cancel bookings and buy or check tickets.<br>New here? Please create a free account.") +
+      tr("マイページのご利用にはログインが必要です。<br>ご予約の確認・日時変更・取消、回数券のご購入・残り回数の確認ができます。<br>はじめての方は「新規会員登録（無料）」からご登録ください。") +
       "</p>" +
-      '<div class="btnrow"><button type="button" class="gold" style="border:0;cursor:pointer" id="mp-login">' + (ja ? "ログイン" : "Log in") + "</button>" +
-      '<button type="button" class="gold" style="border:1px solid #c5a15e;background:#fff;color:#8a6a33;cursor:pointer" id="mp-register">' + (ja ? "新規会員登録（無料）" : "Sign up (free)") + "</button></div></div>";
+      '<div class="btnrow"><button type="button" class="gold" style="border:0;cursor:pointer" id="mp-login">' + esc(tr("ログイン")) + "</button>" +
+      '<button type="button" class="gold" style="border:1px solid #c5a15e;background:#fff;color:#8a6a33;cursor:pointer" id="mp-register">' + esc(tr("新規会員登録（無料）")) + "</button></div></div>";
   }
 
   // マイページ下部のログアウト。会員でない（メールのリンク等で予約を見ている）ときは、
   // 回数券を使うための会員ログイン・新規登録へ1行だけ案内する
   function logoutFoot() {
-    const ja = pageLang !== "en";
     const lk = 'style="background:none;border:0;padding:0;font:inherit;color:#8a6a33;text-decoration:underline;cursor:pointer"';
-    return '<div class="card"><div class="btnrow"><button type="button" class="cancel" id="mp-logout">' + (ja ? "ログアウト" : "Log out") + "</button></div>" +
+    return '<div class="card"><div class="btnrow"><button type="button" class="cancel" id="mp-logout">' + esc(tr("ログアウト")) + "</button></div>" +
       (member ? "" : '<p class="empty" style="text-align:center;margin:12px 0 0;font-size:13px">' +
-        (ja ? "回数券のご購入・残り回数の確認は " : "To buy or check tickets: ") +
-        '<button type="button" id="mp-login" ' + lk + ">" + (ja ? "会員ログイン" : "Log in") + "</button>／" +
-        '<button type="button" id="mp-register" ' + lk + ">" + (ja ? "新規会員登録" : "Sign up") + "</button></p>") +
+        tr("回数券のご購入・残り回数の確認は {login}／{register}", {
+          login: '<button type="button" id="mp-login" ' + lk + ">" + esc(tr("会員ログイン")) + "</button>",
+          register: '<button type="button" id="mp-register" ' + lk + ">" + esc(tr("新規会員登録")) + "</button>",
+        }) + "</p>") +
       "</div>";
   }
 
   // メールの「予約のキャンセルはこちら」から開いた予約を一番上に並べる
   const focusFirst = (list) => focusId ? [...list.filter((r) => r.entry.id === focusId), ...list.filter((r) => r.entry.id !== focusId)] : list;
   function bookingCard(row, withButtons) {
-    const t = L[norm(row.bk.language)] || T();
+    const t = T();
     const cancelled = row.bk.status !== "confirmed";
     return '<div class="card' + (row.entry.id === focusId ? " focus" : "") + '" data-id="' + esc(row.entry.id) + '">' +
       '<div class="rowline"><span class="badge' + (cancelled ? " gray" : "") + '">' + (cancelled ? t.cancelled : t.booked) + "</span>" +
       '<span class="when">' + t.date(row.bk.serviceDate, hm(row.bk.start)) + "</span></div>" +
-      '<div class="rowline"><span class="k">' + t.menu + "</span><span>" + esc(row.bk.courseName) + "</span></div>" +
-      '<div class="rowline"><span class="k">' + t.total + "</span><span>" + t.yen(row.bk.total) + "</span></div>" +
+      '<div class="rowline"><span class="k">' + t.menu + "</span><span>" + esc(menuName(row.bk.courseName)) + "</span></div>" +
+      '<div class="rowline"><span class="k">' + t.total + "</span><span>" + esc(price(row.bk.total)) + "</span></div>" +
       (row.bk.ticket_name
-        ? '<div class="rowline"><span class="k">回数券</span><span>' + esc(row.bk.ticket_name) + "（残り " + (row.bk.ticket_left_after ?? "-") + "回）</span></div>"
+        ? '<div class="rowline"><span class="k">' + esc(tr("回数券")) + "</span><span>" + esc(tr("{name}（残り {n}回）", { name: plan(row.bk.ticket_name), n: row.bk.ticket_left_after ?? "-" })) + "</span></div>"
         : "") +
       (withButtons && !cancelled && row.bk.start > Date.now()
         ? '<div class="btnrow">' +
@@ -322,7 +330,8 @@
     document.getElementById("tab-home").textContent = t.home;
     document.getElementById("tab-resv").textContent = t.resv;
     document.getElementById("tab-member").textContent = t.member;
-    document.getElementById("tab-tickets").textContent = pageLang === "en" ? "Tickets" : "回数券";
+    document.getElementById("tab-tickets").textContent = tr("回数券");
+    applyChrome();
     const tab = (location.hash || "#home").slice(1);
     for (const id of ["home", "resv", "member", "tickets"]) {
       document.getElementById("tab-" + id).classList.toggle("active", tab === id);
@@ -370,11 +379,11 @@
         '<div class="card"><h2>' + t.member + "</h2>" +
         '<div class="rowline"><span class="k">' + t.name + "</span><span>" + esc(name) + "</span></div>" +
         '<div class="btnrow"><a class="gold" href="#member">' + t.member + "</a></div></div>" +
-        '<div class="card"><h2>回数券</h2>' +
+        '<div class="card"><h2>' + esc(tr("回数券")) + "</h2>" +
         (myTickets.length
-          ? myTickets.map((tk) => '<div class="rowline"><span class="k">' + esc(tk.plan_name) + '</span><span>残り ' + tk.uses_left + "回</span></div>").join("")
-          : '<p class="empty">お得な回数券をご用意しています。</p>') +
-        '<div class="btnrow"><a class="gold" href="#tickets">回数券を見る</a></div></div>' +
+          ? myTickets.map((tk) => '<div class="rowline"><span class="k">' + esc(plan(tk.plan_name)) + "</span><span>" + esc(tr("残り {n}回", { n: tk.uses_left })) + "</span></div>").join("")
+          : '<p class="empty">' + esc(tr("お得な回数券をご用意しています。")) + "</p>") +
+        '<div class="btnrow"><a class="gold" href="#tickets">' + esc(tr("回数券を見る")) + "</a></div></div>" +
         logoutFoot();
     } else if (tab === "resv") {
       main.innerHTML = focusFirst(rows).map((r) => bookingCard(r, true)).join("");
@@ -384,26 +393,25 @@
   // 会員情報タブ：登録メール・お名前・電話番号の確認と変更、パスワード変更、ログアウト
   function memberView(name) {
     const t = T();
-    const ja = pageLang !== "en";
     const inp = 'style="width:100%;box-sizing:border-box;border:1px solid #cfcfcf;border-radius:6px;padding:10px 12px;font-size:15px;margin:4px 0 10px"';
     return '<div class="card"><h2>' + t.member + "</h2>" +
-      '<div class="rowline"><span class="k">' + (ja ? "メールアドレス（ログインID）" : "Email (login ID)") + "</span><span>" + esc(member.email) + "</span></div>" +
+      '<div class="rowline"><span class="k">' + esc(tr("メールアドレス（ログインID）")) + "</span><span>" + esc(member.email) + "</span></div>" +
       '<div class="rowline"><span class="k">' + t.name + "</span><span>" + esc(name) + "</span></div>" +
-      '<div class="rowline"><span class="k">' + (ja ? "電話番号" : "Phone") + "</span><span>" + esc(member.phone || "") + "</span></div>" +
+      '<div class="rowline"><span class="k">' + esc(tr("電話番号")) + "</span><span>" + esc(member.phone || "") + "</span></div>" +
       "</div>" +
-      '<div class="card"><h2>' + (ja ? "会員情報の変更" : "Edit member info") + "</h2>" +
+      '<div class="card"><h2>' + esc(tr("会員情報の変更")) + "</h2>" +
       '<form id="mp-profile">' +
       "<label>" + t.name + '<input name="name" ' + inp + ' value="' + esc(member.name || "") + '"></label>' +
-      "<label>" + (ja ? "電話番号" : "Phone") + '<input name="phone" ' + inp + ' value="' + esc(member.phone || "") + '"></label>' +
-      '<div class="btnrow"><button type="submit" class="gold" style="border:0;cursor:pointer">' + (ja ? "保存する" : "Save") + "</button></div>" +
+      "<label>" + esc(tr("電話番号")) + '<input name="phone" ' + inp + ' value="' + esc(member.phone || "") + '"></label>' +
+      '<div class="btnrow"><button type="submit" class="gold" style="border:0;cursor:pointer">' + esc(tr("保存する")) + "</button></div>" +
       "</form></div>" +
-      '<div class="card"><h2>' + (ja ? "パスワードの変更" : "Change password") + "</h2>" +
+      '<div class="card"><h2>' + esc(tr("パスワードの変更")) + "</h2>" +
       '<form id="mp-pass">' +
-      "<label>" + (ja ? "現在のパスワード" : "Current password") + '<input name="pass" type="password" ' + inp + "></label>" +
-      "<label>" + (ja ? "新しいパスワード（6文字以上）" : "New password (6+ characters)") + '<input name="newPass" type="password" ' + inp + "></label>" +
-      '<div class="btnrow"><button type="submit" class="gold" style="border:0;cursor:pointer">' + (ja ? "変更する" : "Change") + "</button></div>" +
+      "<label>" + esc(tr("現在のパスワード")) + '<input name="pass" type="password" ' + inp + "></label>" +
+      "<label>" + esc(tr("新しいパスワード（6文字以上）")) + '<input name="newPass" type="password" ' + inp + "></label>" +
+      '<div class="btnrow"><button type="submit" class="gold" style="border:0;cursor:pointer">' + esc(tr("変更する")) + "</button></div>" +
       "</form></div>" +
-      '<div class="card"><div class="btnrow"><button type="button" class="cancel" id="mp-logout">' + (ja ? "ログアウト" : "Log out") + "</button></div></div>";
+      '<div class="card"><div class="btnrow"><button type="button" class="cancel" id="mp-logout">' + esc(tr("ログアウト")) + "</button></div></div>";
   }
 
   const jd = (iso) => { const ms = typeof iso === "number" ? iso : Date.parse(iso); return Number.isFinite(ms) ? new Date(ms + 9 * 3600e3).toISOString().slice(0, 10) : ""; };
@@ -413,36 +421,38 @@
       const revival = tk.kind === "revival";
       // 残数の根拠：復活分は「どの購入分から何回」、購入した券は「この購入で復活した回数」、元の券は「復活で移した回数」
       const why = revival
-        ? (tk.revived_from || []).map((x) => esc(x.purchased_label) + "購入の「" + esc(x.plan_name) + "」から" + x.count + "回").join("<br>")
+        ? (tk.revived_from || []).map((x) => esc(tr("{date}購入の「{plan}」から{n}回", { date: dateLabel(x.purchased_label), plan: plan(x.plan_name), n: x.count }))).join("<br>")
         : "";
       return '<div class="card">' +
-        '<div class="rowline"><span class="badge' + stCls + '">' + esc(tk.status) + '</span><span class="when">' + esc(tk.plan_name) + "</span></div>" +
-        '<div class="rowline"><span class="k">' + (revival ? "復活した日" : "購入日") + "</span><span>" + jd(tk.purchased_at) + "</span></div>" +
-        '<div class="rowline"><span class="k">' + (revival ? "復活した回数" : "利用可能回数") + "</span><span>" + tk.uses_total + "回</span></div>" +
-        (revival ? '<div class="rowline"><span class="k">内訳</span><span>前回までの購入分から復活<br>' + why + "</span></div>" : "") +
-        '<div class="rowline"><span class="k">残り回数</span><span><b style="font-size:16px">' + tk.uses_left + '回</b>（利用済み ' + tk.used + "回" +
-        (tk.revived_out ? "・期限切れ後に" + tk.revived_out + "回を新しい回数券へ復活" : "") + "）</span></div>" +
-        (tk.revival ? '<div class="rowline"><span class="k">復活</span><span>このご購入で、期限切れの未使用' + tk.revival.total + "回を復活しました（「復活分」の回数券）</span></div>" : "") +
-        '<div class="rowline"><span class="k">有効期限</span><span>' + (tk.expires_label || jd(new Date(tk.expires_at + 9 * 3600e3).toISOString())) + "</span></div>" +
+        '<div class="rowline"><span class="badge' + stCls + '">' + esc(tr(tk.status)) + '</span><span class="when">' + esc(plan(tk.plan_name)) + "</span></div>" +
+        '<div class="rowline"><span class="k">' + esc(tr(revival ? "復活した日" : "購入日")) + "</span><span>" + esc(dateLabel(jd(tk.purchased_at))) + "</span></div>" +
+        '<div class="rowline"><span class="k">' + esc(tr(revival ? "復活した回数" : "利用可能回数")) + "</span><span>" + esc(tr("{n}回", { n: tk.uses_total })) + "</span></div>" +
+        (revival ? '<div class="rowline"><span class="k">' + esc(tr("内訳")) + "</span><span>" + esc(tr("前回までの購入分から復活")) + "<br>" + why + "</span></div>" : "") +
+        '<div class="rowline"><span class="k">' + esc(tr("残り回数")) + '</span><span><b style="font-size:16px">' + esc(tr("{n}回", { n: tk.uses_left })) + "</b>" +
+        esc(tk.revived_out
+          ? tr("（利用済み {n}回・期限切れ後に{m}回を新しい回数券へ復活）", { n: tk.used, m: tk.revived_out })
+          : tr("（利用済み {n}回）", { n: tk.used })) + "</span></div>" +
+        (tk.revival ? '<div class="rowline"><span class="k">' + esc(tr("復活")) + "</span><span>" + esc(tr("このご購入で、期限切れの未使用{n}回を復活しました（「復活分」の回数券）", { n: tk.revival.total })) + "</span></div>" : "") +
+        '<div class="rowline"><span class="k">' + esc(tr("有効期限")) + "</span><span>" + esc(dateLabel(tk.expires_label || jd(new Date(tk.expires_at + 9 * 3600e3).toISOString()))) + "</span></div>" +
         "</div>";
     }).join("");
     const plans = ticketPlans.map((pl) =>
       '<div class="card">' +
-      '<div class="rowline"><span class="when">' + esc(pl.name) + "</span><span>" +
-      (pl.regular_price > pl.price ? '<s style="color:#999;margin-right:6px">' + pl.regular_price.toLocaleString("ja-JP") + "円</s>" : "") +
-      "<b>" + pl.price.toLocaleString("ja-JP") + "円</b></span></div>" +
-      '<div class="rowline"><span class="k">' + pl.uses + "回分／有効期限は購入日から" + esc(pl.valid_label || "1年間") + "</span></div>" +
-      (pl.menu_names && pl.menu_names.length ? '<div class="rowline"><span class="k">対象メニュー：' + esc(pl.menu_names.join("・")) + "</span></div>" : "") +
-      '<p class="empty" style="margin:6px 0">' + esc(pl.description || "") + "</p>" +
-      '<div class="btnrow"><button type="button" class="gold" style="border:0;cursor:pointer" data-buy="' + esc(pl.id) + '">この回数券を購入</button></div>' +
+      '<div class="rowline"><span class="when">' + esc(plan(pl.name)) + "</span><span>" +
+      (pl.regular_price > pl.price ? '<s style="color:#999;margin-right:6px">' + esc(price(pl.regular_price)) + "</s>" : "") +
+      "<b>" + esc(price(pl.price)) + "</b></span></div>" +
+      '<div class="rowline"><span class="k">' + esc(tr("{uses}回分／有効期限は購入日から{valid}", { uses: pl.uses, valid: I18N ? I18N.validFor(pl.valid_label || "1年間") : (pl.valid_label || "1年間") })) + "</span></div>" +
+      (pl.menu_names && pl.menu_names.length ? '<div class="rowline"><span class="k">' + esc(tr("対象メニュー：{names}", { names: joinNames(pl.menu_names.map(menuName)) })) + "</span></div>" : "") +
+      '<p class="empty" style="margin:6px 0">' + esc(pl.description ? tr(pl.description) : "") + "</p>" +
+      '<div class="btnrow"><button type="button" class="gold" style="border:0;cursor:pointer" data-buy="' + esc(pl.id) + '">' + esc(tr("この回数券を購入")) + "</button></div>" +
       "</div>").join("");
     // ログイン中の会員だけが購入できる（判定はサーバー側でも必ず行う）
     if (!member) return loginGate();
-    return '<div class="card"><h2>保有中の回数券</h2>' +
-      (own || '<p class="empty">保有中の回数券はありません。</p>') + "</div>" +
-      '<div class="card"><h2>回数券のご購入</h2>' +
-      '<p class="empty" style="margin:0 0 8px">' + esc(ticketNote) + "</p>" +
-      (plans || '<p class="empty">現在販売中の回数券はありません。</p>') + "</div>";
+    return '<div class="card"><h2>' + esc(tr("保有中の回数券")) + "</h2>" +
+      (own || '<p class="empty">' + esc(tr("保有中の回数券はありません。")) + "</p>") + "</div>" +
+      '<div class="card"><h2>' + esc(tr("回数券のご購入")) + "</h2>" +
+      '<p class="empty" style="margin:0 0 8px">' + esc(ticketNote ? tr(ticketNote) : "") + "</p>" +
+      (plans || '<p class="empty">' + esc(tr("現在販売中の回数券はありません。")) + "</p>") + "</div>";
   }
 
   // 会員情報・パスワードの変更（フォーム送信）
@@ -450,12 +460,11 @@
     const f = e.target;
     if (f.id !== "mp-profile" && f.id !== "mp-pass") return;
     e.preventDefault();
-    const ja = pageLang !== "en";
     const body = f.id === "mp-profile"
       ? { name: f.name.value, phone: f.phone.value }
       : { pass: f.pass.value, newPass: f.newPass.value };
     if (f.id === "mp-pass" && String(body.newPass || "").trim().length < 6) {
-      window.alert(ja ? "新しいパスワードは6文字以上で入力してください。" : "New password must be at least 6 characters.");
+      window.alert(tr("新しいパスワードは6文字以上で入力してください。"));
       return;
     }
     try {
@@ -463,13 +472,12 @@
         headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j.ok) {
-        window.alert(j.error === "invalidLogin" ? (ja ? "現在のパスワードが違います。" : "Current password is incorrect.")
-          : (ja ? "保存できませんでした。" : "Could not save."));
+        window.alert(j.error === "invalidLogin" ? tr("現在のパスワードが違います。") : tr("保存できませんでした。"));
         return;
       }
-      window.alert(ja ? "保存しました。" : "Saved.");
+      window.alert(tr("保存しました。"));
     } catch {
-      window.alert(ja ? "保存できませんでした。" : "Could not save.");
+      window.alert(tr("保存できませんでした。"));
       return;
     }
     await loadAll();
@@ -495,11 +503,12 @@
     if (buyId) {
       if (!member) { if (window.CNMember) window.CNMember.open(); return; }
       const pl = ticketPlans.find((p) => p.id === buyId);
-      if (!window.confirm((pl ? pl.name + "（" + pl.uses + "回分・" + pl.price.toLocaleString("ja-JP") + "円）" : "この回数券") +
-        "を購入します。よろしいですか？\nお支払いは店頭にて承ります。")) return;
+      if (!window.confirm(pl
+        ? tr("{plan}（{uses}回分・{price}）を購入します。よろしいですか？\nお支払いは店頭にて承ります。", { plan: plan(pl.name), uses: pl.uses, price: price(pl.price) })
+        : tr("この回数券を購入します。よろしいですか？\nお支払いは店頭にて承ります。"))) return;
       // ログイン中は会員情報のメールアドレスで購入（入力不要）。お名前が未登録のときだけ確認する
       let nm = member.name || "";
-      if (!nm) { nm = window.prompt("お名前を入力してください", "") || ""; if (!nm.trim()) return; }
+      if (!nm) { nm = window.prompt(tr("お名前を入力してください。"), "") || ""; if (!nm.trim()) return; }
       // 購入キー：通信の再試行・二重押しでも、同じ購入として1回だけ処理される（サーバー側で判定）
       const requestKey = "tp-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
       try {
@@ -509,17 +518,17 @@
         const j = await r.json();
         if (!r.ok || !j.ok) {
           if (j.error === "memberOnly") {
-            window.alert("回数券のご購入にはログインが必要です。");
+            window.alert(tr("回数券のご購入にはログインが必要です。"));
             return;
           }
           throw new Error(j.error || "purchase");
         }
         tkSave([...tkStore(), { id: j.ticket.id, token: j.ticket.token },
           ...(j.revival ? [{ id: j.revival.ticket.id, token: j.revival.ticket.token }] : [])]);
-        window.alert("回数券を購入しました。お支払いは店頭にて承ります。\n残り回数：" + j.ticket.uses_left + "回" +
-          (j.revival ? "\n\n以前ご購入の回数券で有効期限が切れていた未使用分 " + j.revival.total + "回を復活しました。\n（「" + j.revival.ticket.plan_name + "」・有効期限 " + j.revival.ticket.expires_label + "）" : ""));
+        window.alert(tr("回数券を購入しました。お支払いは店頭にて承ります。\n残り回数：{n}回", { n: j.ticket.uses_left }) +
+          (j.revival ? tr("\n\n以前ご購入の回数券で有効期限が切れていた未使用分 {n}回を復活しました。\n（「{plan}」・有効期限 {date}）", { n: j.revival.total, plan: plan(j.revival.ticket.plan_name), date: dateLabel(j.revival.ticket.expires_label) }) : ""));
       } catch {
-        window.alert("購入できませんでした。入力内容をご確認ください。");
+        window.alert(tr("購入できませんでした。入力内容をご確認ください。"));
         return;
       }
       await loadTickets();
@@ -530,7 +539,7 @@
     if (!id) return;
     const row = rows.find((r) => r.entry.id === id);
     if (!row) return;
-    const t = L[norm(row.bk.language)] || T(); // 予約したときの言語で確認・完了を表示
+    const t = T(); // 今の表示言語で確認・完了を表示
     if (!window.confirm(t.confirm)) return;
     try {
       const r = await fetch("/api/bookings/cancel", {
@@ -548,6 +557,31 @@
     render();
   });
   window.addEventListener("hashchange", render);
+  // ページの外枠：上部・下部のメニュー名、ページのタイトル、言語の切り替え（予約サイトの「Language」と同じ保存先）
+  function applyChrome() {
+    if (!I18N) return;
+    const keys = ["home", "book", "menu", "map"];
+    document.title = tr("マイページ") + " | CN Ueno health & beauty";
+    document.documentElement.lang = pageLang === "zh" ? "zh-CN" : pageLang;
+    document.querySelectorAll(".desktop-nav .nav-item span").forEach((el, i) => { if (keys[i]) el.textContent = I18N.nav(keys[i]); });
+    document.querySelectorAll(".mobile-nav .mobile-item small").forEach((el, i) => { if (keys[i]) el.textContent = I18N.nav(keys[i]); });
+    document.querySelector(".desktop-nav")?.setAttribute("aria-label", tr("メインメニュー"));
+    document.querySelector(".mobile-nav")?.setAttribute("aria-label", tr("モバイルメニュー"));
+    let sel = document.getElementById("mp-lang");
+    if (!sel) {
+      const box = document.querySelector(".header-actions");
+      if (!box) return;
+      sel = document.createElement("select");
+      sel.id = "mp-lang";
+      sel.style.cssText = "margin-right:10px;border:1px solid #d6c39b;border-radius:6px;background:#fff;color:#5a4a2a;font-size:13px;padding:6px 8px;cursor:pointer";
+      sel.innerHTML = I18N.LANGS.map((l) => '<option value="' + l + '">' + esc(I18N.label(l)) + "</option>").join("");
+      sel.addEventListener("change", () => I18N.set(sel.value));
+      box.prepend(sel);
+    }
+    sel.setAttribute("aria-label", tr("言語"));
+    if (sel.value !== pageLang) sel.value = pageLang;
+  }
+  if (I18N) I18N.onChange((l) => { pageLang = l; render(); });
 
   loadAll().then(() => {
     render();

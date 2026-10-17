@@ -4,6 +4,11 @@
 (function () {
   "use strict";
   let settings = null;
+  // 多言語：あとから追加した部分の文言は、共通の辞書（cn-i18n.js）で予約サイトと同じ8か国語に訳して出す
+  const I18N = window.CNI18N || null;
+  const T = (ja, v) => (I18N ? I18N.t(ja, v) : String(ja).replace(/\{(\w+)\}/g, (m, k) => (v && v[k] != null ? v[k] : m)));
+  const curLang = () => (I18N ? I18N.lang() : "ja");
+  const joinNames = (list) => list.join(["ja", "zh", "ko"].includes(curLang()) ? "・" : ", ");
 
   // Reactがサーバーのページを引き継ぐ（ハイドレーション）前に書き換えるとエラー（#418）になり
   // 画面が描き直されるため、ページの書き換えは引き継ぎが終わってから行う（最長6秒待つ）
@@ -46,16 +51,19 @@
     const fm = settings;
     if (label) label.style.display = fm.visible ? "" : "none";
     if (!fm.visible) return;
-    if (fm.label && label && label.firstChild && label.firstChild.nodeType === 3 &&
+    // 管理画面で設定した見出し・入力例（日本語）は、日本語表示のときだけ使う（ほかの言語は予約サイトの訳のまま）
+    const jaMode = curLang() === "ja";
+    if (jaMode && fm.label && label && label.firstChild && label.firstChild.nodeType === 3 &&
         label.firstChild.textContent !== fm.label) {
       label.firstChild.textContent = fm.label;
     }
-    if (ta.placeholder !== (fm.placeholder || "")) ta.placeholder = fm.placeholder || "";
+    const ph = jaMode ? (fm.placeholder || "") : (fm.placeholder && I18N && I18N.has(fm.placeholder) ? T(fm.placeholder) : "");
+    if (ta.placeholder !== ph) ta.placeholder = ph;
     if (ta.maxLength !== (fm.maxLength || 2000)) ta.maxLength = fm.maxLength || 2000;
     if (ta.required !== !!fm.required) ta.required = !!fm.required;
     // 必須マークと説明文
     let note = label && label.querySelector(".fm-note");
-    const noteText = (fm.required ? "（必須）" : "") + (fm.description ? " " + fm.description : "");
+    const noteText = (fm.required ? T("（必須）") : "") + (fm.description ? " " + T(fm.description) : "");
     if (noteText.trim()) {
       if (!note && label) {
         note = document.createElement("small");
@@ -110,8 +118,8 @@
           loginRequired: "ご予約の日時変更にはログインが必要です。右上の「ログイン」からログインしてください。",
           alreadyCancelled: "変更元のご予約はすでに取り消されています。新しくご予約ください。",
           tooLate: "開始時刻を過ぎたご予約は変更できません。店舗までお電話ください。" }[j2.error];
-        if (j2.error === "notFound" && rescheduleId()) { clearReschedule(); window.alert("変更元のご予約が見つかりませんでした。新しくご予約ください。"); }
-        else if (msg) window.alert(msg);
+        if (j2.error === "notFound" && rescheduleId()) { clearReschedule(); window.alert(T("変更元のご予約が見つかりませんでした。新しくご予約ください。")); }
+        else if (msg) window.alert(T(msg));
       }
       if (u.includes("/api/bookings") && !u.includes("cancel") && init?.method === "POST" && res.ok) {
         const j = await res.clone().json();
@@ -190,6 +198,8 @@
     await loadMyTickets();
     const use = usableTickets();
     let plans = [], title = "会員様向け 回数券";
+    const price = (n) => (I18N ? I18N.price(n) : Number(n).toLocaleString("ja-JP") + "円");
+    const planName = (n) => (I18N ? I18N.plan(n) : n);
     try {
       const pj = await (await origFetch("/api/tickets/plans", { cache: "no-store" })).json();
       // 管理画面で「予約・メニューページの最上部に表示」にしたプランだけ（並び順も管理画面の順）
@@ -202,17 +212,18 @@
     box.className = "list-card";
     const rows = plans.map((pl) =>
       '<a href="/mypage#tickets" class="menu-row">' +
-      '<img class="course-thumb" src="/fm-favicon.svg" alt="' + esc2(pl.name) + '"/>' +
-      '<span class="menu-row-copy"><b>' + esc2(pl.name) + "（" + pl.uses + "回分・有効期限は購入日から" + esc2(pl.valid_label || "1年間") + "）" +
-      (pl.menu_names && pl.menu_names.length ? "　対象：" + esc2(pl.menu_names.join("・")) : "") +
+      '<img class="course-thumb" src="/fm-favicon.svg" alt="' + esc2(planName(pl.name)) + '"/>' +
+      '<span class="menu-row-copy"><b>' +
+      esc2(T("{name}（{uses}回分・有効期限は購入日から{valid}）", { name: planName(pl.name), uses: pl.uses, valid: I18N ? I18N.validFor(pl.valid_label || "1年間") : (pl.valid_label || "1年間") })) +
+      (pl.menu_names && pl.menu_names.length ? esc2(T("　対象：{names}", { names: joinNames(pl.menu_names.map((m) => (I18N ? I18N.menu(m) : m))) })) : "") +
       // 残り回数は同じプランの券（そのプランの購入で復活した分を含む）を合計
       (use.some((t) => t.plan_id ? t.plan_id === pl.id : t.plan_name === pl.name)
-        ? "　現在の残り回数 " + use.filter((t) => t.plan_id ? t.plan_id === pl.id : t.plan_name === pl.name).reduce((a, t) => a + t.uses_left, 0) + "回"
+        ? esc2(T("　現在の残り回数 {n}回", { n: use.filter((t) => t.plan_id ? t.plan_id === pl.id : t.plan_name === pl.name).reduce((a, t) => a + t.uses_left, 0) }))
         : "") +
-      "</b><small>" + (pl.regular_price > pl.price ? "<s>" + pl.regular_price.toLocaleString("ja-JP") + "円</s> " : "") + pl.price.toLocaleString("ja-JP") + "円" +
-      (pl.description ? "　" + esc2(pl.description) : "") + "</small></span>" +
+      "</b><small>" + (pl.regular_price > pl.price ? "<s>" + esc2(price(pl.regular_price)) + "</s> " : "") + esc2(price(pl.price)) +
+      (pl.description ? "　" + esc2(T(pl.description)) : "") + "</small></span>" +
       '<i aria-hidden="true">›</i></a>').join("");
-    box.innerHTML = "<h2>" + esc2(title) + "</h2>" + '<div class="list-body">' + rows + "</div>";
+    box.innerHTML = "<h2>" + esc2(T(title)) + "</h2>" + '<div class="list-body">' + rows + "</div>";
     firstCard.parentElement.insertBefore(box, firstCard);
     if (!document.getElementById("fm-tk-style")) {
       const st = document.createElement("style");
@@ -243,13 +254,13 @@
     if (!use.length) return;
     const sec = document.createElement("section");
     sec.id = "fm-ticket-pick";
-    const jd2 = (ms2) => new Date(ms2 + 9 * 3600e3).toISOString().slice(0, 10);
+    const jd2 = (ms2) => (I18N ? I18N.date(ms2) : new Date(ms2 + 9 * 3600e3).toISOString().slice(0, 10));
     sec.innerHTML =
-      '<h2 class="fm-h">回数券</h2>' +
+      '<h2 class="fm-h">' + esc2(T("回数券")) + "</h2>" +
       '<div class="fm-box">' +
-      '<label><input type="radio" name="fm-tk" value="" checked> 使用しない</label>' +
+      '<label><input type="radio" name="fm-tk" value="" checked> ' + esc2(T("使用しない")) + "</label>" +
       use.map((t, i) => '<label><input type="radio" name="fm-tk" value="' + i + '"> ' +
-        esc2(t.plan_name) + "（残り " + t.uses_left + "回・有効期限 " + jd2(t.expires_at) + "）</label>").join("") +
+        esc2((I18N ? I18N.plan(t.plan_name) : t.plan_name) + T("（残り {n}回・有効期限 {date}）", { n: t.uses_left, date: jd2(t.expires_at) })) + "</label>").join("") +
       '<p class="fm-tk-note" id="fm-tk-note"></p>' +
       "</div>";
     anchor.before(sec);
@@ -264,7 +275,7 @@
       const t = use[Number(v)];
       const item = tkItems().find((x) => x.id === t.id);
       window.__fmTicketSel = { id: t.id, token: item?.token || t.token || "", name: t.plan_name };
-      note.textContent = "この予約で1回分を使用します（ご予約後の残り " + (t.uses_left - 1) + "回）。コース料金は回数券でのお支払いになります。";
+      note.textContent = T("この予約で1回分を使用します（ご予約後の残り {n}回）。コース料金は回数券でのお支払いになります。", { n: t.uses_left - 1 });
     });
   }
 
@@ -272,67 +283,70 @@
   function decorateConsent() {
     const form = document.querySelector("form.booking-form");
     if (!form) return;
-    const cb = [...form.querySelectorAll('input[type="checkbox"]')].find((b) => {
-      const t = b.closest("label")?.textContent || "";
-      return t.includes("予約内容と個人情報") || t.includes("checked my booking");
-    });
+    // 同意のチェック欄は名前（consent）で見つける（文言で探すと、日本語・英語以外の表示で見つからなかった）
+    const cb = form.querySelector('input[type="checkbox"][name="consent"]') ||
+      [...form.querySelectorAll('input[type="checkbox"]')].find((b) => {
+        const t = b.closest("label")?.textContent || "";
+        return (I18N ? I18N.btAll("consent") : ["予約内容と個人情報の取り扱いを確認しました。"]).some((x) => x && t.includes(x.slice(0, 8)));
+      });
     if (!cb) return;
     const lab = cb.closest("label");
-    const en = /checked my booking/.test(lab.textContent);
+    if (!lab) return;
     lab.style.display = "none";
-    // 個人情報の注記も隠す
+    // 個人情報の注記も隠す（どの言語の文言でも）
+    const privacyTexts = I18N ? I18N.btAll("privacy") : ["お名前・連絡先は予約管理"];
     [...form.querySelectorAll("p, small")].forEach((p) => {
-      const t = p.textContent || "";
-      if (t.includes("お名前・連絡先は予約管理") || t.includes("Your name and contact details")) p.style.display = "none";
+      const t = (p.textContent || "").trim();
+      if (t && privacyTexts.some((x) => x && t.startsWith(x.slice(0, 12)))) p.style.display = "none";
     });
-    const submit = [...form.querySelectorAll("button")].find((b) =>
-      b.type === "submit" || /この内容で予約を確定する|Confirm this booking|同意して予約する|Agree and book/.test(b.textContent));
+    const submit = form.querySelector('button[type="submit"]');
     if (submit) {
-      const want = en ? "Agree and book" : "同意して予約する";
-      if (submit.textContent !== want && !/予約を確定しています|Saving/.test(submit.textContent)) submit.textContent = want;
+      const want = T("同意して予約する");
+      const saving = I18N ? I18N.btAll("saving") : ["予約を確定しています…"];
+      const txt = submit.textContent.trim();
+      if (txt !== want && !saving.some((x) => x && txt === x.trim())) submit.textContent = want;
     }
     if (!document.getElementById("fm-notice")) {
       const sec = document.createElement("section");
       sec.id = "fm-notice";
       sec.innerHTML =
-        '<h2 class="fm-h">' + (en ? "Notes for your visit" : "ご来店に際しての注意事項") + "</h2>" +
+        '<h2 class="fm-h">' + T("ご来店に際しての注意事項") + "</h2>" +
         '<div class="fm-box"><p>' +
-        (en
-          ? "If you need to change your booking or will be late, we would appreciate it if you could contact us in advance.<br/>Contact: cnsalon2021@gmail.com<br/><br/>Thank you very much."
-          : "ご予約の変更や遅刻される場合は、事前にご連絡いただけますと幸いです。<br/>ご連絡先：cnsalon2021@gmail.com<br/><br/>どうぞよろしくお願いいたします。") +
+        T("ご予約の変更や遅刻される場合は、事前にご連絡いただけますと幸いです。<br/>ご連絡先：cnsalon2021@gmail.com<br/><br/>どうぞよろしくお願いいたします。") +
         "</p>" +
         '<div class="fm-agree-wrap"><button type="button" class="fm-agree"><span class="fm-ck"></span>' +
-        (en ? "Confirmed" : "確認しました") + "</button></div></div>";
+        T("確認しました") + "</button></div></div>";
       lab.before(sec);
       sec.querySelector(".fm-agree").addEventListener("click", () => cb.click());
       const terms = document.createElement("p");
       terms.id = "fm-terms";
       const lk = (t, doc) => '<a href="#" data-fm-doc="' + doc + '">' + t + '<svg viewBox="0 0 12 12" width="11" height="11"><path fill="none" stroke="%23b08d4f" stroke-width="1.3" d="M4.5 2H2v8h8V7.5M7 1.5h3.5V5M10.2 1.8 5.5 6.5" transform="scale(1)"/></svg></a>';
-      terms.innerHTML = en
-        ? "Booking requires agreement to the " + lk("Terms of Service", "terms") + " and " + lk("Privacy Policy", "privacy") + "."
-        : "予約には " + lk("利用規約", "terms") + " および " + lk("プライバシーポリシー", "privacy") + " への同意が必要です。";
+      terms.innerHTML = T("予約には {terms} および {privacy} への同意が必要です。", { terms: lk(T("利用規約"), "terms"), privacy: lk(T("プライバシーポリシー"), "privacy") });
       (submit || lab).before(terms);
       terms.addEventListener("click", (e) => {
         const doc = e.target.closest("[data-fm-doc]")?.dataset.fmDoc;
         if (!doc) return;
         e.preventDefault();
-        openTermsModal(doc, en);
+        openTermsModal(doc);
       });
-      const st = document.createElement("style");
-      st.textContent =
-        "#fm-notice{margin:18px 0 6px}" +
-        "#fm-notice .fm-h{font-size:15px;font-weight:700;margin:0 0 12px}" +
-        "#fm-notice .fm-box{background:#f6ecd9;border-radius:8px;padding:18px 20px 20px;font-size:14px;line-height:1.9}" +
-        "#fm-notice .fm-box p{margin:0 0 14px}" +
-        "#fm-notice .fm-agree-wrap{text-align:center}" +
-        "#fm-notice .fm-agree{font:inherit;display:inline-flex;align-items:center;gap:9px;background:#fff;border:1px solid #c5a15e;border-radius:6px;color:#b08d4f;font-weight:700;padding:12px 26px;cursor:pointer}" +
-        "#fm-notice .fm-ck{width:16px;height:16px;border:1px solid #c5a15e;border-radius:3px;display:inline-block;position:relative;background:#fff}" +
-        "#fm-notice.fm-on .fm-ck{background:#b08d4f}" +
-        "#fm-notice.fm-on .fm-ck::after{content:'';position:absolute;left:4px;top:1px;width:5px;height:9px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}" +
-        "#fm-terms{font-size:14px;margin:16px 0 14px}" +
-        "#fm-terms a{color:#b08d4f;text-decoration:none;margin:0 2px}" +
-        "#fm-terms a svg{vertical-align:-1px;margin-left:2px}";
-      document.head.appendChild(st);
+      if (!document.getElementById("fm-notice-style")) {
+        const st = document.createElement("style");
+        st.id = "fm-notice-style";
+        st.textContent =
+          "#fm-notice{margin:18px 0 6px}" +
+          "#fm-notice .fm-h{font-size:15px;font-weight:700;margin:0 0 12px}" +
+          "#fm-notice .fm-box{background:#f6ecd9;border-radius:8px;padding:18px 20px 20px;font-size:14px;line-height:1.9}" +
+          "#fm-notice .fm-box p{margin:0 0 14px}" +
+          "#fm-notice .fm-agree-wrap{text-align:center}" +
+          "#fm-notice .fm-agree{font:inherit;display:inline-flex;align-items:center;gap:9px;background:#fff;border:1px solid #c5a15e;border-radius:6px;color:#b08d4f;font-weight:700;padding:12px 26px;cursor:pointer}" +
+          "#fm-notice .fm-ck{width:16px;height:16px;border:1px solid #c5a15e;border-radius:3px;display:inline-block;position:relative;background:#fff}" +
+          "#fm-notice.fm-on .fm-ck{background:#b08d4f}" +
+          "#fm-notice.fm-on .fm-ck::after{content:'';position:absolute;left:4px;top:1px;width:5px;height:9px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}" +
+          "#fm-terms{font-size:14px;margin:16px 0 14px}" +
+          "#fm-terms a{color:#b08d4f;text-decoration:none;margin:0 2px}" +
+          "#fm-terms a svg{vertical-align:-1px;margin-left:2px}";
+        document.head.appendChild(st);
+      }
     }
     document.getElementById("fm-notice")?.classList.toggle("fm-on", cb.checked);
   }
@@ -483,24 +497,42 @@
     ["p", "以上"],
     ["cp", "Copyright 2026 CN health & beauty salon. All Rights Reserved."],
   ];
-  function openTermsModal(doc, en) {
+  // 訳文は日本語の原文と同じ並び（先頭に「参考訳です・日本語の原文が優先します」の一文）。一度読んだら使い回す
+  const legalCache = {};
+  const loadLegal = (lang) => legalCache[lang] || (legalCache[lang] = fetch("/legal/" + lang + ".json").then((r) => {
+    if (!r.ok) throw new Error("legal " + r.status);
+    return r.json();
+  }).catch((e) => { delete legalCache[lang]; throw e; }));
+  const docHtml = (items) => items.map(([t, x]) => {
+    const h = esc2(x);
+    return t === "ch" ? '<h2 class="fm-doc-ch">' + h + "</h2>" :
+      t === "ar" ? "<h3>" + h + "</h3>" :
+      t === "sub" ? '<p class="fm-doc-sub">' + h + "</p>" :
+      t === "cp" ? '<p class="fm-doc-cp">' + h + "</p>" : "<p>" + h + "</p>";
+  }).join("");
+  function openTermsModal(doc) {
     document.getElementById("fm-doc-modal")?.remove();
-    const title = doc === "privacy" ? "プライバシーポリシー" : "利用規約";
-    const items = doc === "privacy" ? PRIVACY_DOC : TERMS_DOC;
+    const lang = curLang();
+    const title = T(doc === "privacy" ? "プライバシーポリシー" : "利用規約");
     const wrap = document.createElement("div");
     wrap.id = "fm-doc-modal";
     wrap.innerHTML =
-      '<div class="fm-doc-card" role="dialog" aria-modal="true" aria-label="' + title + '">' +
-        '<div class="fm-doc-head"><b>' + title + '</b><button type="button" class="fm-doc-x" aria-label="閉じる">×</button></div>' +
+      '<div class="fm-doc-card" role="dialog" aria-modal="true" aria-label="' + esc2(title) + '">' +
+        '<div class="fm-doc-head"><b>' + esc2(title) + '</b><button type="button" class="fm-doc-x" aria-label="' + esc2(T("閉じる")) + '">×</button></div>' +
         '<div class="fm-doc-body">' +
-          items.map(([t, x]) =>
-            t === "ch" ? '<h2 class="fm-doc-ch">' + x + "</h2>" :
-            t === "ar" ? "<h3>" + x + "</h3>" :
-            t === "sub" ? '<p class="fm-doc-sub">' + x + "</p>" :
-            t === "cp" ? '<p class="fm-doc-cp">' + x + "</p>" : "<p>" + x + "</p>").join("") +
+          (lang === "ja" ? docHtml(doc === "privacy" ? PRIVACY_DOC : TERMS_DOC) : "<p>" + esc2(T("読み込んでいます…")) + "</p>") +
         "</div>" +
-        '<div class="fm-doc-foot"><button type="button" class="fm-doc-close">' + (en ? "Close" : "閉じる") + "</button></div>" +
+        '<div class="fm-doc-foot"><button type="button" class="fm-doc-close">' + esc2(T("閉じる")) + "</button></div>" +
       "</div>";
+    if (lang !== "ja") {
+      loadLegal(lang).then((d) => {
+        const body = wrap.querySelector(".fm-doc-body");
+        if (body) body.innerHTML = docHtml(doc === "privacy" ? d.privacy : d.terms);
+      }).catch(() => {
+        const body = wrap.querySelector(".fm-doc-body");
+        if (body) body.innerHTML = "<p>" + esc2(T("読み込めませんでした。時間をおいてお試しください。")) + "</p>";
+      });
+    }
     wrap.addEventListener("click", (e) => {
       if (e.target === wrap || e.target.closest(".fm-doc-x, .fm-doc-close")) wrap.remove();
     });
@@ -529,12 +561,11 @@
   // ---- 予約完了ページ：予約ID表記・オプション行・「マイページへ」ボタン ----
   function decorateComplete() {
     if (!location.pathname.startsWith("/book/complete")) return;
+    if (!I18N) return;
     const dts = [...document.querySelectorAll("dt")];
     if (!dts.length) return;
-    const en = dts.some((d) => /Booking (reference|number)|Name/.test(d.textContent));
-    const renames = en
-      ? { "Booking reference": "Booking ID", "Booking number": "Booking ID", "Selected menu": "Menu" }
-      : { "予約番号": "予約ID", "選択中のメニュー": "メニュー" };
+    const bt = (k) => I18N.bt(k);
+    const renames = { [bt("reference")]: T("予約ID"), [bt("selection")]: T("メニュー") };
     for (const dt of dts) {
       const t = dt.textContent.trim();
       if (renames[t]) dt.textContent = renames[t];
@@ -546,7 +577,7 @@
       dl.dataset.fmId = "1";
       refEl.closest("p").style.display = "none";
       const dt = document.createElement("dt");
-      dt.textContent = en ? "Booking ID" : "予約ID";
+      dt.textContent = T("予約ID");
       const dd = document.createElement("dd");
       dd.textContent = refEl.textContent;
       dl.prepend(dd);
@@ -556,38 +587,35 @@
       dl.dataset.fmOrder = "1";
       // オプション行を追加し、画像と同じ並び順にする
       const label = (t) => [...dl.querySelectorAll("dt")].find((d) => d.textContent.trim() === t);
-      if (!label(en ? "Options" : "オプション")) {
+      if (!label(T("オプション"))) {
         const dt = document.createElement("dt");
-        dt.textContent = en ? "Options" : "オプション";
+        dt.textContent = T("オプション");
         const dd = document.createElement("dd");
-        dd.textContent = en ? "None" : "なし";
+        dd.textContent = T("なし");
         dl.append(dt, dd);
       }
-      const order = en
-        ? ["Booking ID", "Name", "Date and time", "Guests", "Menu", "Options", "Staff", "Total"]
-        : ["予約ID", "お名前", "来店日時", "人数", "メニュー", "オプション", "スタッフ", "合計"];
+      const order = [T("予約ID"), bt("name"), bt("date"), bt("count"), T("メニュー"), T("オプション"), bt("staffLabel"), bt("total")];
       for (const t of order) {
         const dt = label(t);
         if (dt) { const dd = dt.nextElementSibling; dl.append(dt); if (dd?.tagName === "DD") dl.append(dd); }
       }
     }
-    // 見出しの文言
+    // 見出しの文言（「予約が完了しました」→「ご予約ありがとうございました。」と同じ意味の文に）
+    const doneText = bt("done");
     document.querySelectorAll("h1, h2, p").forEach((h) => {
       if (h.childElementCount) return;
-      if (h.textContent.trim() === "予約が完了しました") h.textContent = "ご予約ありがとうございました。";
-      if (h.textContent.trim() === "Booking complete") h.textContent = "Thank you for your booking.";
+      if (h.textContent.trim() === doneText) h.textContent = T("ご予約ありがとうございました。");
     });
     // 印刷ボタン → マイページへ（全言語の印刷ボタン文言に対応）
-    const pr = [...document.querySelectorAll("button, a")].find((b) =>
+    const prints = I18N.btAll("print");
+    const pr = [...document.querySelectorAll("button, a")].find((b) => prints.includes(b.textContent.trim()) ||
       /予約内容を印刷・保存|Print|打印|인쇄|Imprimer|Imprimir|Stampa|drucken/.test(b.textContent));
     if (pr && !document.getElementById("fm-mypage-btn")) {
       pr.style.display = "none";
       const a = document.createElement("a");
       a.id = "fm-mypage-btn";
       a.href = "/mypage";
-      const mpLang = (() => { try { return localStorage.getItem("cn-salon-language") || "ja"; } catch { return "ja"; } })();
-      a.textContent = { ja: "マイページへ", en: "My page", zh: "我的页面", ko: "마이페이지",
-        fr: "Ma page", es: "Mi página", it: "La mia pagina", de: "Meine Seite" }[mpLang] || "マイページへ";
+      a.textContent = T("マイページへ");
       a.style.cssText = "display:inline-block;background:#c5a15e;color:#fff;font-weight:700;border-radius:6px;padding:13px 34px;text-decoration:none;font-size:14px;";
       pr.before(a);
       const wrap = a.parentElement;
@@ -605,9 +633,11 @@
     if (!dl || dl.dataset.fmTicket) return;
     dl.dataset.fmTicket = "1";
     const dt = document.createElement("dt");
-    dt.textContent = "回数券";
+    dt.textContent = T("回数券");
     const dd = document.createElement("dd");
-    dd.textContent = (used.name ? used.name + "を" : "") + "1回使用（残り " + used.left + "回）";
+    dd.textContent = used.name
+      ? T("{name}を1回使用（残り {n}回）", { name: I18N ? I18N.plan(used.name) : used.name, n: used.left })
+      : T("1回使用（残り {n}回）", { n: used.left });
     dl.appendChild(dt);
     dl.appendChild(dd);
   }
@@ -634,8 +664,9 @@
     const bar = document.createElement("div");
     bar.id = "fm-reschedule-bar";
     bar.style.cssText = "background:#fff6e5;border:1px solid #e3c98f;border-radius:8px;padding:12px 16px;margin:0 0 14px;font-size:14px;line-height:1.7;color:#5a4a2a;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between";
-    bar.innerHTML = "<span><b>ご予約の日時変更中です。</b>新しい日時・メニューで予約を確定すると、元のご予約は自動的に取り消されます。</span>" +
-      '<button type="button" id="fm-reschedule-stop" style="border:1px solid #c5a15e;background:#fff;color:#8a6a33;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer">変更をやめる</button>';
+    const gap = ["ja", "zh"].includes(curLang()) ? "" : " "; // 文と文のあいだ（日本語・中国語以外は空白を入れる）
+    bar.innerHTML = "<span><b>" + esc2(T("ご予約の日時変更中です。")) + "</b>" + gap + esc2(T("新しい日時・メニューで予約を確定すると、元のご予約は自動的に取り消されます。")) + "</span>" +
+      '<button type="button" id="fm-reschedule-stop" style="border:1px solid #c5a15e;background:#fff;color:#8a6a33;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer">' + esc2(T("変更をやめる")) + "</button>";
     main.prepend(bar);
     bar.querySelector("#fm-reschedule-stop").addEventListener("click", () => { clearReschedule(); location.href = "/mypage#resv"; });
   }
@@ -649,10 +680,16 @@
     dl.dataset.fmRescheduled = "1";
     const p = document.createElement("p");
     p.style.cssText = "background:#fff6e5;border-radius:8px;padding:10px 14px;font-size:14px;color:#5a4a2a;margin:0 0 12px";
-    p.textContent = "ご予約の日時を変更しました。元のご予約は取り消されています（マイページでご確認いただけます）。";
+    p.textContent = T("ご予約の日時を変更しました。元のご予約は取り消されています（マイページでご確認いただけます）。");
     dl.before(p);
   }
 
+  if (I18N) I18N.onChange(() => {
+    if (location.pathname.startsWith("/book/complete")) { location.reload(); return; }
+    for (const id of ["fm-notice", "fm-terms", "fm-tkbanner", "fm-ticket-pick", "fm-reschedule-bar", "fm-doc-modal"]) document.getElementById(id)?.remove();
+    document.querySelectorAll(".fm-note").forEach((n) => n.remove());
+    window.__fmTicketSel = null;
+  });
   setInterval(() => { if (!canTouch()) return; apply(); decorateConsent(); decorateComplete(); decorateTicketBanner(); decorateTicketPick(); decorateTicketComplete(); decorateReschedule(); decorateRescheduleComplete(); }, 700);
   setInterval(() => { if (!document.hidden) load(); }, 60000);
 })();

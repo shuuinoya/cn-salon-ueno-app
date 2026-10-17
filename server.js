@@ -41,8 +41,6 @@ function brandFor(file, url) {
 function fileVer(name) {
   try { return String(Math.floor(fs.statSync(path.join(__dirname, "public", name)).mtimeMs)); } catch { return "1"; }
 }
-const TWEAKS_VER = fileVer("booking-tweaks.js");
-const MEMBER_VER = fileVer("member.js");
 const PM_VER = fileVer("pm-layout.js") + "-" + fileVer("pm-layout.css");
 
 const ENTRY_URLS = {
@@ -99,8 +97,12 @@ function sendFile(res, file, status, type, head, url, req) {
       try { mtime = Math.floor(fs.statSync(file).mtimeMs / 1000) * 1000; } catch {}
       if (mtime) {
         const ims = Date.parse(req?.headers?.["if-modified-since"] || "");
-        const long = /\/(assets|_next)\//.test(file) || (url && url.searchParams?.has("v"));
-        const cache = { "Cache-Control": long ? "public, max-age=86400" : "public, max-age=3600", "Last-Modified": new Date(mtime).toUTCString() };
+        // 画面の部品（JS・CSS・翻訳データのJSON）は、書き換えたらすぐ全員に届くよう毎回確認させる（変わっていなければ304で中身は送らない）。
+        // 写真などはハッシュつき（/assets/・/_next/）なら1日、?v= つきは1日、その他は1時間の再利用を許可
+        const versioned = !!(url && url.searchParams?.has("v"));
+        const code = /\.(m?js|css|json)$/i.test(file);
+        const long = versioned || (/\/(assets|_next)\//.test(file) && !code);
+        const cache = { "Cache-Control": long ? "public, max-age=86400" : code ? "no-cache" : "public, max-age=3600", "Last-Modified": new Date(mtime).toUTCString() };
         if (ims && ims >= mtime) {
           res.writeHead(304, cache);
           return res.end();
@@ -138,13 +140,15 @@ function sendFile(res, file, status, type, head, url, req) {
         // 予約サイトの全ページに、会員ログイン（右上ボタン→ログインモーダル）のスクリプトを差し込む
         // （管理画面には入れない。?v=更新時刻 を付けて、ブラウザに古いキャッシュを使わせない）
         if (brandFor(file, url) === BOOKING_BRAND && !file.includes("pm-login") && !file.includes("admin")) {
-          text = text.replace("</body>", '<script src="/member.js?v=' + MEMBER_VER + '" defer></script></body>');
+          // 多言語の共通辞書（あとから追加した部分を8か国語で表示する）。ほかのスクリプトより先に読み込む
+          text = text.replace("</head>", '<script src="/cn-i18n.js?v=' + fileVer("cn-i18n.js") + '"></script></head>');
+          text = text.replace("</body>", '<script src="/member.js?v=' + fileVer("member.js") + '" defer></script></body>');
           // 予約サイトのレイアウト補正（タブレット幅で本文の列を中央に置く）
           text = text.replace("</head>", '<link rel="stylesheet" href="/booking-layout.css?v=' + fileVer("booking-layout.css") + '"/></head>');
         }
         // 予約・メニューページには、フリーメッセージ設定の反映と会員向け回数券表示のスクリプトを差し込む
         if (url.pathname.startsWith("/book") || url.pathname.startsWith("/menus")) {
-          text = text.replace("</body>", '<script src="/booking-tweaks.js?v=' + TWEAKS_VER + '" defer></script></body>');
+          text = text.replace("</body>", '<script src="/booking-tweaks.js?v=' + fileVer("booking-tweaks.js") + '" defer></script></body>');
         }
         // ファビコン：予約サイト＝店のマーク（丸いロゴ）／管理画面＝4枚花びらのクローバーで統一
         // （版番号を付けて、ブラウザの頑固なファビコンキャッシュにも確実に反映させる）
