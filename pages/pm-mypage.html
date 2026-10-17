@@ -514,7 +514,7 @@
       try {
         const r = await fetch("/api/tickets/purchase", { method: "POST", credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ planId: buyId, name: nm.trim(), requestKey }) });
+          body: JSON.stringify({ planId: buyId, name: nm.trim(), requestKey, language: pageLang }) });
         const j = await r.json();
         if (!r.ok || !j.ok) {
           if (j.error === "memberOnly") {

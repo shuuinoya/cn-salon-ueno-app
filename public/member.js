@@ -231,7 +231,7 @@
         if (!email || !email.includes("@")) return showErr(T.badEmail);
         btn.disabled = true;
         try {
-          const { ok } = await post("/api/member/reset", { email });
+          const { ok } = await post("/api/member/reset", { email, language: I18N ? I18N.lang() : "ja" });
           if (!ok) throw new Error("reset");
           const okBox = container.querySelector(".cn-ok");
           okBox.textContent = T.forgotDone(email);
@@ -268,7 +268,7 @@
           bookings: ls("cn-mypage").map((x) => ({ id: x.id, token: x.token })),
           tickets: ls("cn-tickets").map((x) => ({ id: x.id, token: x.token })),
         };
-        const { ok, j } = await post("/api/member/login", { email, pass, name, mode, link });
+        const { ok, j } = await post("/api/member/login", { email, pass, name, mode, link, language: I18N ? I18N.lang() : "ja" });
         if (!ok || !j.ok) { showErr(ERR()[j.error] || T.fail); btn.disabled = false; return; }
         if (j.registered) window.alert(T.registered(j.member.email));
         if (location.pathname === "/login") location.href = "/mypage";

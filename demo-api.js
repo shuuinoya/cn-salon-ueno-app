@@ -516,6 +516,9 @@ const state = {
   mailSerial: 0,
   // 予約フォームのフリーメッセージ欄の設定（管理画面から変更できる）
   settings: {
+    // お客様へのメールを、ご予約（ご購入・会員登録）時の言語で送るか（管理画面のメール管理で切り替え）。
+    // オフのあいだは、全員に従来どおり日本語で送る
+    mailI18n: { enabled: false },
     freeMessage: {
       visible: true,      // 欄を表示するか
       required: false,    // 入力必須にするか
@@ -1169,6 +1172,17 @@ function mailHtml(body) {
     "</td></tr></table></td></tr></table></body></html>";
 }
 
+// お客様の言語でメールを作る部品（mail-i18n.js）。日本語のメールの作り方には手を加えない
+let mailI18nInst = null;
+const mailI18n = () => mailI18nInst || (mailI18nInst = require("./mail-i18n")({
+  state, findBooking, ensureEvents, profileOf, displayId, fmtTime, bookingMypageUrl, origin: () => origin(),
+  ticketUsedCount, otherUsableTickets,
+  get SEP() { return SEP; }, get MAIL_STORE() { return MAIL_STORE; }, get MAIL_TEL() { return MAIL_TEL; },
+  get VISIT_CONTACT_MAIL() { return VISIT_CONTACT_MAIL; }, get MASK_PASS() { return MASK_PASS; }, get MASK_RESET() { return MASK_RESET; },
+}));
+const mailI18nOn = () => !!(state.settings.mailI18n && state.settings.mailI18n.enabled);
+const langNorm = (l) => { const s2 = String(l || "").toLowerCase(); const k = s2.startsWith("zh") ? "zh" : s2.slice(0, 2); return ["ja", "en", "zh", "ko", "fr", "es", "it", "de"].includes(k) ? k : ""; };
+
 // メールに載せる秘密の値（会員登録時のパスワード・パスワード再設定用URL）は、メール記録
 // （state.mails＝管理画面のメール管理・保存データ）には伏せ字で残し、お客様に届くメールにだけ
 // 実際の値を入れる。値はメモリ上にだけ置き、送信処理が終わったら消す（保存データには一切書かない）
@@ -1281,8 +1295,17 @@ function deliverDueMails(source) {
       m.error = "宛先メールアドレスの形式が不正のため、配信サービスに拒否されました";
       continue;
     }
+    // お客様の言語で送る設定のときは、日本語以外のお客様に、その言語の件名・本文で送る（記録の本文は日本語のまま）。
+    // 作れなかった場合は従来どおり日本語で送る
+    let send = m;
+    if (mailI18nOn() && m.kind === "customer") {
+      try {
+        const loc = mailI18n().localize(m);
+        if (loc) { send = { ...m, subject: loc.subject, body: loc.body, html: mailHtml(loc.body) }; m.sentLang = loc.lang; m.sentSubject = loc.subject; m.sentBody = loc.body; }
+      } catch (e) { m.i18nError = String(e && e.message || e); }
+    }
     const cfg = realSendAllowed(m.to);
-    if (cfg && mailHasDevUrl(m)) {
+    if (cfg && mailHasDevUrl(send)) {
       // 開発用URL（127.0.0.1・localhost 等）を含むメールは、お客様に届くと開けないため実送信しない
       m.status = "failed";
       m.error = "本文に開発用のURL（127.0.0.1・localhost等）が含まれるため、送信を止めました。" +
@@ -1292,7 +1315,7 @@ function deliverDueMails(source) {
     if (cfg) {
       // 実送信（許可された宛先だけ）。結果が返るまで「送信処理中」。成功応答を確認してから「送信済み」にする。
       // パスワード等の秘密の値は、ここで送る本文にだけ入れる（記録の本文は伏せ字のまま）
-      const out = withMailSecrets(m);
+      const out = withMailSecrets(send);
       mailSecrets.delete(m.id);
       (cfg.relayUrl ? relaySend : smtpSend)(cfg, out, (err) => {
         if (m.status !== "sending") return; // 二重送信防止
@@ -1358,6 +1381,7 @@ function queueMemberWelcomeMail(m, plainPass) {
       `ご連絡先：${VISIT_CONTACT_MAIL}`,
     ].join("\n") + MAIL_COMMON,
     Date.now(), null);
+  mail.memberMail = { kind: "welcome", email: m.email, name: m.name || "", createdAt: m.createdAt, lang: m.language || "" };
   mailSecrets.set(mail.id, [[MASK_PASS, plainPass]]);
   deliverDueMails();
 }
@@ -1382,12 +1406,14 @@ function queueMemberResetMail(m, token, exp) {
       "※このメールにお心当たりがない場合は、このメールを破棄してください。パスワードは変更されません。",
     ].join("\n") + MAIL_COMMON,
     Date.now(), null);
+  mail.memberMail = { kind: "reset", email: m.email, name: m.name || "", exp, lang: m.language || "" };
   mailSecrets.set(mail.id, [[MASK_RESET, url]]);
   deliverDueMails();
 }
 // パスワード変更完了のお知らせ（本人が気づけるように。パスワード自体は記載しない）
 function queueMemberPassChangedMail(m, via) {
-  queueMail("customer", "member", m.email,
+  const at = Date.now();
+  const mail = queueMail("customer", "member", m.email,
     `${MAIL_STORE} パスワード変更完了のお知らせ`,
     [
       ...(m.name ? [`${m.name} 様`, ""] : []),
@@ -1406,6 +1432,7 @@ function queueMemberPassChangedMail(m, via) {
       `ご連絡先：${VISIT_CONTACT_MAIL}`,
     ].join("\n") + MAIL_COMMON,
     Date.now(), null);
+  mail.memberMail = { kind: "passChanged", email: m.email, name: m.name || "", at, via, lang: m.language || "" };
   deliverDueMails();
 }
 
@@ -3073,7 +3100,8 @@ function handleDemoApi(req, res, url) {
       else if ((P === "/api/demo/course-photo" || P === "/api/demo/staff-photo") && isGet) need = null; // 公開画像
       else if (P === "/api/demo/accounts") need = "admin";                // アカウント管理は管理者のみ
       else if (P === "/api/demo/mail-relay") need = "admin";              // メール送信設定は管理者のみ（全メールの送り先になるため）
-      else if (P === "/api/demo/mails" && !isGet) need = "manager";       // メールの再送はマネージャー以上
+      else if (P === "/api/demo/mails" && !isGet) need = "manager";
+      else if (P === "/api/demo/mail-lang" && !isGet) need = "manager";       // メールの再送はマネージャー以上
       else if (P === "/api/demo/report" || P === "/api/demo/mailtest") need = "manager";
       else if (!isGet && (P === "/api/demo/settings" || P === "/api/demo/ticket-plans" ||
         P === "/api/demo/courses" || P === "/api/demo/tickets" ||
@@ -3156,6 +3184,38 @@ function handleDemoApi(req, res, url) {
       Math.max(m.createdAt || 0, m.scheduledAt || 0) > seen).length;
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
     res.end(req.method === "HEAD" ? undefined : JSON.stringify({ failedMails }));
+    return true;
+  }
+  // お客様へのメールの言語（オン：ご予約・ご購入・会員登録時の言語で送る／オフ：全員に日本語）
+  if (url.pathname === "/api/demo/mail-lang") {
+    if (req.method === "GET" || req.method === "HEAD") {
+      const custom = state.mails.filter((m) => m.kind === "customer");
+      const byLang = {};
+      for (const m of custom.slice(-200)) { const l = mailI18n().langOf(m); byLang[l] = (byLang[l] || 0) + 1; }
+      res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+      res.end(req.method === "HEAD" ? undefined : JSON.stringify({ enabled: mailI18nOn(), recentByLang: byLang }));
+      return true;
+    }
+    if (req.method === "POST") {
+      readJson(req, res, 1e3, (b) => {
+        state.settings.mailI18n = { enabled: b.enabled === true };
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true, enabled: mailI18nOn() }));
+      });
+      return true;
+    }
+    res.writeHead(405); res.end(); return true;
+  }
+  // メールの見本：記録のメールを、指定した言語で作るとどうなるか（送らない。オン・オフに関係なく確認できる）
+  if (url.pathname === "/api/demo/mails/preview" && (req.method === "GET" || req.method === "HEAD")) {
+    const m = state.mails.find((x) => x.id === String(url.searchParams.get("id") || ""));
+    if (!m) { res.writeHead(404, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: "notFound" })); return true; }
+    const want = langNorm(url.searchParams.get("lang")) || mailI18n().langOf(m);
+    let loc = null, error = null;
+    try { loc = want === "ja" ? null : mailI18n().localize(m, want); } catch (e) { error = String(e && e.message || e); }
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    res.end(req.method === "HEAD" ? undefined : JSON.stringify({ id: m.id, lang: loc ? loc.lang : "ja", customerLang: mailI18n().langOf(m),
+      subject: loc ? loc.subject : m.subject, body: loc ? loc.body : m.body, translatable: m.kind === "customer", error }));
     return true;
   }
   if (url.pathname === "/api/demo/alerts" && req.method === "POST") {
@@ -3776,7 +3836,10 @@ function handleDemoApi(req, res, url) {
           menu_scope: plan.menu_scope ?? "all", revive_group: plan.revive_group ?? "",
           remind_sent: false, remind_log: [],
           history: [{ at: new Date(now).toISOString(), type: "purchase", delta: plan.uses, left_after: plan.uses }],
+          // 購入したときの予約サイトの言語（お客様の言語でメールを送る設定のときに使う）
+          language: langNorm(b.language) || (member && member.language) || "",
         };
+        if (member && langNorm(b.language)) member.language = langNorm(b.language);
         state.tickets.set(tid, t);
         let revival = null;
         try {
@@ -3888,12 +3951,14 @@ function handleDemoApi(req, res, url) {
         // 新規会員登録（メールアドレスとパスワードが揃えばそのまま会員になる）
         if (pass.length < 6) throw err(400, "shortPass");
         m = { email, pass: hashPass(pass), name: String(b.name || "").trim().slice(0, 120),
-          phone: String(b.phone || "").trim().slice(0, 40), createdAt: Date.now(), bookings: [], tickets: [] };
+          phone: String(b.phone || "").trim().slice(0, 40), createdAt: Date.now(), bookings: [], tickets: [],
+          language: langNorm(b.language) }; // 登録したときの予約サイトの言語（お客様の言語でメールを送る設定のときに使う）
         state.members.set(email, m);
         registered = true;
         queueMemberWelcomeMail(m, pass); // ログインID＋パスワード入り（パスワードは記録には残さない）
       }
       state.memberFails.delete(fk);
+      if (langNorm(b.language)) m.language = langNorm(b.language); // 最後にログインしたときの言語
       // このブラウザに保存されていた予約・回数券（予約ID＋トークン＝本人の証明）を会員に紐付ける
       const link = b.link || {};
       for (const it of (Array.isArray(link.bookings) ? link.bookings : []).slice(0, 50)) {
@@ -3933,6 +3998,7 @@ function handleDemoApi(req, res, url) {
       pruneResets();
       // 登録の有無を推測させない（登録が無くても同じ応答）。連打で大量に送らないよう、
       // 同じアドレスへの再設定メールは1分に1通まで
+      if (m && langNorm(b.language)) m.language = langNorm(b.language);
       if (m) {
         const recent = [...state.memberResets.values()].some((r) => r.email === email && !r.used && Date.now() - r.created < 60000);
         if (!recent) {

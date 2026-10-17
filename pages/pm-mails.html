@@ -149,6 +149,18 @@
     margin-top: 6px;
   }
   .empty { color: #8d8d8d; padding: 30px 0; text-align: center; }
+  /* お客様へのメールの言語 */
+  #mailLang { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+  #mailLang b { font-size: 14px; }
+  #mailLang .ml-state { font-weight: 700; }
+  #mailLang .ml-state.on { color: #2e6b34; }
+  #mailLang button { font: inherit; border: 1px solid #c5a15e; background: #fff; color: #8a6a33; border-radius: 6px; padding: 6px 14px; cursor: pointer; font-weight: 700; }
+  #mailLang button.on { background: #c5a15e; color: #fff; }
+  #mailLang small { flex-basis: 100%; color: #6b7280; line-height: 1.7; }
+  .langbadge { display: inline-block; font-size: 11px; border: 1px solid #9dbbe6; color: #1f4f8a; background: #eef4fc; border-radius: 3px; padding: 0 6px; margin-left: 6px; }
+  .lp { margin: 10px 0; padding: 10px 12px; border: 1px dashed #d6c39b; border-radius: 6px; background: #fffaf0; }
+  .lp select { font: inherit; margin-left: 6px; }
+  .lp pre { margin: 8px 0 0; }
 </style>
 </head>
 <body>
@@ -159,6 +171,13 @@
     <a href="/" target="_blank">予約サイトを開く</a>
   </header>
   <p class="note" id="deliveryNote">送信設定を確認しています…</p>
+  <div class="note" id="mailLang">
+    <b>お客様へのメールの言語</b>
+    <span class="ml-state" id="mlState">確認しています…</span>
+    <button type="button" id="mlOn">予約した言語で送る</button>
+    <button type="button" id="mlOff">全員に日本語で送る</button>
+    <small>「予約した言語で送る」にすると、予約サイトを日本語以外（英語・中国語・韓国語・フランス語・スペイン語・イタリア語・ドイツ語）で使って予約・購入・会員登録したお客様に、その言語のメールを送ります。お店宛てのメールと、この画面の記録は日本語のままです。お客様宛てのメールを開くと、各言語で届く文面を確認できます（変更はマネージャー以上）。</small>
+  </div>
   <div class="tabs">
     <button data-f="all" class="on">すべて</button>
     <button data-f="customer">お客様宛</button>
@@ -225,7 +244,7 @@
         <summary>
           <span class="badge ${cls}">${label}</span>
           <span class="kind">${m.kind === "customer" ? "お客様宛" : "店舗宛"}</span>
-          <span class="subject">${esc(m.subject)}</span>
+          <span class="subject">${esc(m.subject)}</span>${m.sentLang ? '<span class="langbadge">' + esc(LANG_JA[m.sentLang] || m.sentLang) + "で送信</span>" : ""}
           <span class="meta">${stat}</span>
         </summary>
         <div class="mailbody">
@@ -236,6 +255,8 @@
           ${m.resendOf ? '<p class="to">' + esc(m.resendOf) + " の再送</p>" : ""}
           ${m.skipReason ? '<p class="mail-error" style="color:#7a7a7a">送信中止の理由：' + esc(m.skipReason) + "</p>" : ""}
           ${ticketSnapHtml(m)}
+          ${m.kind === "customer" ? '<div class="lp" data-lp="' + m.id + '">ほかの言語で届く文面を確認：<select data-lpsel="' + m.id + '"><option value="">選んでください</option>' +
+            Object.entries(LANG_JA).filter(([k]) => k !== "ja").map(([k, v]) => '<option value="' + k + '">' + v + "</option>").join("") + "</select><pre hidden></pre></div>" : ""}
           ${m.html
             ? `<iframe class="mailframe" title="メールプレビュー" srcdoc="${escAttr(m.html)}"></iframe>
                <details class="rawtext"><summary>▸ テキスト版を表示</summary><pre>${esc(m.body)}</pre></details>`
@@ -258,6 +279,41 @@
       });
     });
   }
+
+  // ほかの言語で届く文面（見本。送らない）
+  document.getElementById("list").addEventListener("change", async (e) => {
+    const id = e.target.dataset && e.target.dataset.lpsel;
+    if (!id) return;
+    const pre = e.target.parentElement.querySelector("pre");
+    if (!e.target.value) { pre.hidden = true; return; }
+    pre.hidden = false;
+    pre.textContent = "作成しています…";
+    try {
+      const j = await (await fetch("/api/demo/mails/preview?id=" + encodeURIComponent(id) + "&lang=" + e.target.value, { cache: "no-store" })).json();
+      pre.textContent = j.error ? "作成できませんでした：" + j.error : (j.lang === "ja" ? "（この種類のメールは日本語で送ります）\n\n" : "") + "件名：" + j.subject + "\n\n" + j.body;
+    } catch { pre.textContent = "作成できませんでした。"; }
+  });
+  // お客様へのメールの言語（オン・オフ）
+  const LANG_JA = { ja: "日本語", en: "英語", zh: "中国語", ko: "韓国語", fr: "フランス語", es: "スペイン語", it: "イタリア語", de: "ドイツ語" };
+  async function loadMailLang() {
+    try {
+      const j = await (await fetch("/api/demo/mail-lang", { cache: "no-store" })).json();
+      const st = document.getElementById("mlState");
+      st.textContent = j.enabled ? "いまは：予約した言語で送っています" : "いまは：全員に日本語で送っています";
+      st.classList.toggle("on", !!j.enabled);
+      document.getElementById("mlOn").classList.toggle("on", !!j.enabled);
+      document.getElementById("mlOff").classList.toggle("on", !j.enabled);
+    } catch {}
+  }
+  for (const [btn, en] of [["mlOn", true], ["mlOff", false]]) {
+    document.getElementById(btn).addEventListener("click", async () => {
+      if (!window.confirm(en ? "日本語以外で予約したお客様に、その言語でメールを送るようにしますか？" : "全員に日本語でメールを送るように戻しますか？")) return;
+      const r = await fetch("/api/demo/mail-lang", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: en }) });
+      if (!r.ok) window.alert("変更できませんでした（マネージャー以上の権限が必要です）。");
+      loadMailLang();
+    });
+  }
+  loadMailLang();
 
   // 送信失敗のメールを再送（1通につき1回。送信直前に最新の内容を確認し、送る意味がなければ中止）
   document.getElementById("list").addEventListener("click", async (e) => {
