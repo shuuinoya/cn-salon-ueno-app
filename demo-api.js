@@ -3667,6 +3667,15 @@ function handleDemoApi(req, res, url) {
     return true;
   }
 
+  // 管理画面の版（画面の部品ファイルの更新時刻）。開いたままの管理画面が、新しい版に気づいて読み込み直すのに使う
+  if (url.pathname === "/api/demo/build" && (req.method === "GET" || req.method === "HEAD")) {
+    const files = ["public/pm-layout.js", "public/pm-layout.css", "public/_next/static/chunks/index-pm2.js",
+      "public/_next/static/chunks/AdminSchedule-pm2.js", "public/_next/static/chunks/I18n-8lang-v1.js", "pages/admin.html"];
+    const v = files.map((f) => { try { return Math.floor(fs.statSync(path.join(__dirname, f)).mtimeMs); } catch { return 0; } }).join("-");
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    res.end(req.method === "HEAD" ? undefined : JSON.stringify({ v }));
+    return true;
+  }
   if (url.pathname === "/api/demo/attendance" && (req.method === "GET" || req.method === "HEAD")) {
     const ad = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get("date") || "") ? url.searchParams.get("date") : todayJst();
     const records = [];

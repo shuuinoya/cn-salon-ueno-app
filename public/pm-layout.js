@@ -3039,3 +3039,25 @@
     requestAnimationFrame(() => { rowQueued = false; try { tickRows(); } catch {} });
   }).observe(document.documentElement, { childList: true, subtree: true });
 })();
+
+// ---- 新しい版の自動読み込み：画面の部品が更新されたら、開いたままの管理画面も読み込み直す ----
+// 予約・業務・シフトの編集など、入力中の画面が開いているあいだは待ち、閉じてから読み込み直す（入力した内容を消さない）
+(function () {
+  "use strict";
+  let base = null, pending = false;
+  const busy = () => !!document.querySelector(".ledger-side-form, section.ledger-shift-detail, #pm-np, .ledger-modal-backdrop, #cn-login-ov") ||
+    !!(document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName));
+  async function check() {
+    if (document.hidden) return;
+    try {
+      const j = await (await fetch("/api/demo/build", { cache: "no-store" })).json();
+      if (!j || !j.v) return;
+      if (base === null) base = j.v;
+      else if (j.v !== base) pending = true;
+    } catch {}
+  }
+  check();
+  setInterval(check, 60000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) check(); });
+  setInterval(() => { if (pending && !document.hidden && !busy()) location.reload(); }, 3000);
+})();
