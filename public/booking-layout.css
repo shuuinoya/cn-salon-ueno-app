@@ -12,3 +12,31 @@
 @media (max-width: 767px) {
   .header-actions .login-button { display: flex; width: 60px; min-width: 60px; }
 }
+
+/* 日時選択の「スタッフを選択してください。」（NativeCalendar の CnStaffCards）：上に「指名なし・男性スタッフ・女性スタッフ」の小さなボタン、
+   その下にスタッフの写真カード。パソコンは折り返して並べ、スマホは横にすべらせて全員を見る。選んでいるものは金色の枠とチェック */
+.staff-prefs { display: flex; flex-wrap: wrap; gap: 8px; }
+.staff-pref { display: inline-flex; align-items: center; gap: 4px; min-height: 36px; padding: 6px 16px; color: var(--text); font: inherit; font-size: 14px; font-weight: 400; background: #fff; border: 1px solid var(--line); border-radius: 999px; cursor: pointer; }
+.staff-pref:hover { border-color: var(--primary); }
+.staff-pref:focus-visible { outline: 2px solid #946328; outline-offset: 2px; }
+.staff-pref.selected { color: #8a6420; font-weight: 700; background: #fbf4e8; border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+.staff-pref.selected::before { content: "✓"; }
+.staff-cards-wrap { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.staff-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+.staff-card { position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 2px; min-width: 0; padding: 0 0 8px; overflow: hidden; color: var(--text); font: inherit; font-weight: 400; text-align: center; background: #fff; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+.staff-card:hover { border-color: var(--primary); }
+.staff-card:focus-visible { outline: 2px solid #946328; outline-offset: 2px; }
+.staff-card.selected { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary); }
+.staff-card.selected::after { content: "✓"; position: absolute; top: 6px; right: 6px; display: grid; place-items: center; width: 22px; height: 22px; color: #fff; font-size: 13px; font-weight: 700; background: var(--primary); border-radius: 50%; }
+.staff-card-photo { display: grid; place-items: center; width: 100%; aspect-ratio: 3 / 4; object-fit: cover; background: #f6efe4; }
+img.staff-card-photo { display: block; }
+.staff-card-photo svg { width: 46%; height: 46%; fill: #dcc69f; }
+.staff-card-name { padding: 6px 6px 0; font-size: 14px; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.staff-card-fee { padding: 0 6px; color: #8a6420; font-size: 12px; line-height: 1.4; }
+.staff-cards-more { align-self: flex-start; padding: 0 4px; color: #8a6420; font: inherit; font-size: 14px; font-weight: 400; text-decoration: underline; background: none; border: 0; cursor: pointer; }
+.staff-cards-note { margin: 0; padding: 0 4px; color: #6b7280; font-size: 14px; font-weight: 400; }
+.staff-cards-note button { margin-left: 6px; padding: 3px 10px; font: inherit; background: #fff; border: 1px solid #d1d5db; border-radius: 4px; cursor: pointer; }
+@media (max-width: 767px) {
+  .staff-cards { display: flex; overflow-x: auto; scroll-snap-type: x proximity; padding: 2px 2px 6px; -webkit-overflow-scrolling: touch; }
+  .staff-card { flex: 0 0 112px; scroll-snap-align: start; }
+}
