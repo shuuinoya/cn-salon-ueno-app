@@ -902,6 +902,8 @@ function postSchedule(body) {
       const ev = ensureEvents(date);
       const bk = ev.bookings.find((b) => b.id === id && b.status === "confirmed");
       if (!bk) throw err(404, "notFound");
+      // 指名のお客様の予約は、別の時間・別のスタッフへ動かせない（お客様が担当と時間を指定して予約しているため）
+      if (bk.nominated_staff_id && (staffId !== bk.nominated_staff_id || start !== msToMin(date, bk.start_at))) throw err(409, "nominatedLocked");
       const mvTarget = state.staff.find((s) => s.id === staffId);
       if (!mvTarget) throw err(400, "invalid");
       if (mvTarget.active !== 1) throw err(409, "staffUnavailable"); // 退職・停止中には移せない
@@ -916,14 +918,6 @@ function postSchedule(body) {
         ? freeStaffIds(date, start, end, bk.course, mvGender, id).filter((sid) => sid !== staffId).slice(0, bk.people - 1)
         : [];
       if (others.length < bk.people - 1) throw err(409, "soldOut");
-      // 指名予約の担当変更は、変更先の指名料で再計算する（指名を受けない相手には移せない）
-      if (bk.nominated_staff_id && bk.nominated_staff_id !== staffId) {
-        const pr = profileOf(mvTarget);
-        if (!pr.personalNomination) throw err(409, "staffUnavailable");
-        bk.nominated_staff_id = mvTarget.id;
-        bk.nominated_staff_name = pr.nickname || mvTarget.name;
-        bk.nomination_fee = Number(pr.nominationFee) || 0;
-      }
       bk.start_at = minToMs(date, start);
       bk.end_at = minToMs(date, end);
       // 料金の再計算（深夜料金・指名料）。ホットペッパーの予約はホットペッパー側の確定金額なので変えない
@@ -4363,7 +4357,8 @@ function handleDemoApi(req, res, url) {
     res.end(req.method === "HEAD" ? undefined : JSON.stringify({
       ok: true, id: bk.id, date, start, duration: dur, people,
       course: bk.course, course_name: bk.course_name,
-      staff: list,
+      nominated: !!bk.nominated_staff_id, // 指名のお客様の予約は動かせない（候補は出さない）
+      staff: bk.nominated_staff_id ? [] : list,
     }));
     return true;
   }

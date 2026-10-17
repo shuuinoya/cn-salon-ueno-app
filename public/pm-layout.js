@@ -1262,7 +1262,9 @@
       staffSel2.innerHTML = '<option value="">候補なし</option>';
       timeSel.innerHTML = "";
       staffSel2.disabled = timeSel.disabled = true;
-      note.textContent = "この予約を移動できる空き候補がありません（対応メニュー・シフト・空き状況を満たすスタッフ不在）。";
+      note.textContent = data.nominated
+        ? "指名のお客様の予約は、別の時間・別のスタッフへ動かせません。"
+        : "この予約を移動できる空き候補がありません（対応メニュー・シフト・空き状況を満たすスタッフ不在）。";
       applyMoveOptionGuards(data);
       return;
     }
@@ -1327,6 +1329,7 @@
         outsideShift: "移動先スタッフのシフト時間外です。",
         scheduleConflict: "画面の情報が古くなっています。最新の状態で再度お試しください。",
         staffUnavailable: "そのスタッフには移動できません。",
+        nominatedLocked: "指名のお客様の予約は、別の時間・別のスタッフへ動かせません。",
         notFound: "この予約は既に取消されています。",
       }[out.error] || "移動できませんでした。";
       alert(msg);
