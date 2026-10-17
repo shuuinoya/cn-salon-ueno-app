@@ -684,12 +684,96 @@
     dl.before(p);
   }
 
+  // ---- スタッフ紹介ページの「指名して予約する」：/book?staffId=スタッフID で来たとき ----
+  // メニュー一覧の上に指名するスタッフを出し、そのスタッフが担当できるメニューだけを表示する。
+  // メニューを選んだら、日時選択へ指名つき（staffId）で進む（日時選択・予約確認・指名料は予約画面で指名したときと同じ）
+  const NOM_ID = (() => {
+    const v = new URLSearchParams(location.search).get("staffId") || "";
+    return location.pathname === "/book" && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(v) ? v : "";
+  })();
+  let nomStaff; // undefined＝読み込み中／null＝指名できない／スタッフ
+  let nomLoading = false;
+  if (NOM_ID) {
+    // 絞り込む前のメニュー一覧が一瞬見えないよう、読み込みが済むまで一覧を隠す（最長8秒）
+    const pre = document.createElement("style");
+    pre.id = "fm-nom-pre";
+    pre.textContent = ".list-stack{visibility:hidden}";
+    document.head.appendChild(pre);
+    setTimeout(() => pre.remove(), 8000);
+  }
+  async function loadNomStaff() {
+    nomLoading = true;
+    try {
+      const j = await (await origFetch("/api/staff/list", { cache: "no-store" })).json();
+      nomStaff = (j.staff || []).find((s) => s.id === NOM_ID) || null;
+    } catch {
+      nomStaff = null;
+    }
+    nomLoading = false;
+  }
+  const courseOf = (href) => { try { return new URL(href, location.origin).searchParams.get("courses") || ""; } catch { return ""; } };
+  const withStaff = (href) => { const u = new URL(href, location.origin); u.searchParams.set("staffId", NOM_ID); return u.pathname + u.search; };
+  function decorateNomination() {
+    if (!NOM_ID || location.pathname !== "/book") return;
+    if (nomStaff === undefined) { if (!nomLoading) loadNomStaff(); return; }
+    const stack = document.querySelector(".list-stack");
+    if (!stack) return;
+    if (nomStaff) {
+      // 担当できないメニューを隠し、残ったメニューのリンクに指名をつける（Reactが描き直しても毎回やり直す）
+      const ok = new Set(nomStaff.courses);
+      stack.querySelectorAll('a.menu-row[href^="/book/select-datetime"]').forEach((a) => {
+        const show = ok.has(courseOf(a.getAttribute("href")));
+        a.style.display = show ? "" : "none";
+        if (show && !a.getAttribute("href").includes("staffId=")) a.setAttribute("href", withStaff(a.getAttribute("href")));
+      });
+      stack.querySelectorAll(".list-card").forEach((card) => {
+        const rows = card.querySelectorAll('a.menu-row[href^="/book/select-datetime"]');
+        if (rows.length) card.style.display = [...rows].some((a) => a.style.display !== "none") ? "" : "none";
+      });
+    }
+    document.getElementById("fm-nom-pre")?.remove();
+    if (document.getElementById("fm-nom-bar")) return;
+    const bar = document.createElement("section");
+    bar.id = "fm-nom-bar";
+    bar.className = "list-card";
+    const linkCss = "color:#8a6420;font-size:14px;text-decoration:underline";
+    const links = '<p style="display:flex;flex-wrap:wrap;gap:6px 18px;margin:10px 0 0">' +
+      '<a href="/staff" style="' + linkCss + '">' + esc2(T("スタッフを選び直す")) + "</a>" +
+      '<a href="/book" style="' + linkCss + '">' + esc2(T("指名せずに予約する")) + "</a></p>";
+    if (!nomStaff) {
+      bar.innerHTML = '<div style="padding:14px 16px;line-height:1.7"><b>' + esc2(T("選択されたスタッフは現在ご指名いただけません。")) + "</b>" + links + "</div>";
+    } else {
+      const user = '<svg viewBox="0 0 256 256" aria-hidden="true" style="width:46%;height:46%;fill:#dcc69f"><path d="M230.92 212c-15.23-26.33-38.7-45.21-66.09-54.16a72 72 0 1 0-73.66 0C63.78 166.78 40.31 185.66 25.08 212a8 8 0 1 0 13.85 8c18.84-32.56 52.14-52 89.07-52s70.23 19.44 89.07 52a8 8 0 1 0 13.85-8ZM72 96a56 56 0 1 1 56 56 56.06 56.06 0 0 1-56-56Z"></path></svg>';
+      const price = (n) => (I18N ? I18N.price(n) : Number(n).toLocaleString("ja-JP") + "円");
+      const none = !nomStaff.courses.length;
+      bar.innerHTML = "<h2>" + esc2(T("指名スタッフ")) + "</h2>" +
+        '<div style="display:flex;gap:14px;align-items:center;padding:14px 16px">' +
+        '<div style="flex:none;width:72px;height:96px;border-radius:6px;overflow:hidden;background:#f6efe4;display:grid;place-items:center">' +
+        (nomStaff.photo ? '<img src="' + esc2(nomStaff.photo) + '" alt="' + esc2(nomStaff.name) + '" style="width:100%;height:100%;object-fit:cover;display:block"/>' : user) + "</div>" +
+        '<div style="min-width:0;line-height:1.6">' +
+        '<b style="font-size:18px;overflow-wrap:anywhere">' + esc2(nomStaff.name) + "</b>" +
+        '<div style="color:#8a6420;font-size:14px">' + esc2(T("指名料")) + " <b>" + esc2(price(nomStaff.nominationFee)) + "</b></div>" +
+        '<div style="color:#6b7280;font-size:13px">' + esc2(T(none ? "このスタッフが担当できるメニューは現在ありません。" : "このスタッフが担当できるメニューを表示しています。")) + "</div>" +
+        links + "</div></div>";
+    }
+    stack.before(bar);
+  }
+  // メニューを選んだら、日時選択へ指名つきで進む（予約サイトの画面部品は指名を知らないため、ここでページごと移動する）
+  document.addEventListener("click", (e) => {
+    if (!NOM_ID || !nomStaff || location.pathname !== "/book") return;
+    const a = e.target.closest && e.target.closest('a.menu-row[href^="/book/select-datetime"]');
+    if (!a || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    location.assign(withStaff(a.getAttribute("href")));
+  }, true);
+
   if (I18N) I18N.onChange(() => {
     if (location.pathname.startsWith("/book/complete")) { location.reload(); return; }
-    for (const id of ["fm-notice", "fm-terms", "fm-tkbanner", "fm-ticket-pick", "fm-reschedule-bar", "fm-doc-modal"]) document.getElementById(id)?.remove();
+    for (const id of ["fm-notice", "fm-terms", "fm-tkbanner", "fm-ticket-pick", "fm-reschedule-bar", "fm-doc-modal", "fm-nom-bar"]) document.getElementById(id)?.remove();
     document.querySelectorAll(".fm-note").forEach((n) => n.remove());
     window.__fmTicketSel = null;
   });
-  setInterval(() => { if (!canTouch()) return; apply(); decorateConsent(); decorateComplete(); decorateTicketBanner(); decorateTicketPick(); decorateTicketComplete(); decorateReschedule(); decorateRescheduleComplete(); }, 700);
+  setInterval(() => { if (!canTouch()) return; apply(); decorateConsent(); decorateComplete(); decorateTicketBanner(); decorateTicketPick(); decorateTicketComplete(); decorateReschedule(); decorateRescheduleComplete(); decorateNomination(); }, 700);
   setInterval(() => { if (!document.hidden) load(); }, 60000);
 })();

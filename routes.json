@@ -358,5 +358,10 @@
     "file": "pages/pm-mypage.html",
     "status": 200,
     "contentType": "text/html; charset=utf-8"
+  },
+  "/staff": {
+    "status": 200,
+    "contentType": "text/html; charset=utf-8",
+    "file": "pages/pm-staff.html"
   }
 }
