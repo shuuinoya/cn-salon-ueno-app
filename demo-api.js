@@ -2403,6 +2403,18 @@ function profileOf(st) {
   try { return JSON.parse(st.profile || "{}"); } catch { return {}; }
 }
 
+// スタッフの写真の印（写真の中身のハッシュ）。写真が無ければ空。同じ写真なら計算し直さない
+const photoVerMemo = new Map();
+function staffPhotoVersion(id) {
+  const photo = state.photos.get(id);
+  if (!photo) return "";
+  const m = photoVerMemo.get(id);
+  if (m && m.photo === photo) return m.v;
+  const v = crypto.createHash("sha256").update(photo).digest("hex").slice(0, 16);
+  photoVerMemo.set(id, { photo, v });
+  return v;
+}
+
 // 指名候補スタッフ一覧（受付中・個人指名あり・コース対応・性別条件）
 function nominatableStaff(courseId, genderPref) {
   return state.staff
@@ -3386,7 +3398,8 @@ function handleDemoApi(req, res, url) {
     return true;
   }
   // スタッフ紹介ページ用：指名できるスタッフ全員（写真・指名料・紹介文と、指名して予約できるメニュー）
-  // 条件は予約画面の指名候補（nominatableStaff）と同じ：受付中・個人指名あり・メニュー対応・メニューの性別指定
+  // 条件は予約画面の指名候補（nominatableStaff）と同じ：受付中・個人指名あり・メニュー対応・メニューの性別指定。
+  // 毎回いまの登録内容から作るので、管理画面の「スタッフ情報」を保存すると次に開いたとき（開いたままのページも1分以内）に反映される
   if (url.pathname === "/api/staff/list" && (req.method === "GET" || req.method === "HEAD")) {
     const courses = [...courseStore.values()];
     const staff = state.staff
@@ -3394,15 +3407,15 @@ function handleDemoApi(req, res, url) {
       .sort((a, b) => a.sort_order - b.sort_order)
       .map((st) => {
         const pr = profileOf(st);
-        const photo = state.photos.get(st.id);
+        const pv = staffPhotoVersion(st.id);
         return {
           id: st.id,
           name: pr.nickname || st.name,
           gender: st.gender,
           nominationFee: Number(pr.nominationFee) || 0,
           message: pr.message || "",
-          // 写真を差し替えたらURLが変わるようにする（ブラウザは同じURLの写真を1日使い回す）
-          photo: photo ? `/api/staff/photo?id=${encodeURIComponent(st.id)}&v=${st.profile_revision || 0}-${photo.length}` : "",
+          // 写真のURLには写真の中身から作った印をつける（差し替えるとURLが変わり、古い写真が残らない）
+          photo: pv ? `/api/staff/photo?id=${encodeURIComponent(st.id)}&v=${pv}` : "",
           courses: courses.filter((c) => staffCanDo(st, c.id) && [st.gender, "none"].includes(courseGender(c.id))).map((c) => c.id),
         };
       });
@@ -3418,8 +3431,10 @@ function handleDemoApi(req, res, url) {
       res.end(JSON.stringify({ error: "notFound" }));
       return true;
     }
-    // 版つき（?v=）のURLは写真が変わるとURLも変わるので、1日使い回してよい
-    res.writeHead(200, { "Content-Type": m2[1], "Cache-Control": url.searchParams.has("v") ? "public, max-age=86400" : "no-store" });
+    // いまの写真の印（スタッフ紹介ページのURL）と一致するときだけ1日使い回してよい（写真を差し替えると印が変わる）。
+    // それ以外（予約画面のスタッフ選択など）は従来どおり毎回取り直す
+    const fresh = url.searchParams.get("v") === staffPhotoVersion(url.searchParams.get("id") || "");
+    res.writeHead(200, { "Content-Type": m2[1], "Cache-Control": fresh ? "public, max-age=86400" : "no-store" });
     res.end(Buffer.from(m2[2], "base64"));
     return true;
   }
