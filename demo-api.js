@@ -591,6 +591,9 @@ const state = {
   memberResets: new Map(),   // sha256(token) -> {email, created, exp, used}
   // メール送信中継（Google Apps Script）。管理画面の「メール送信設定」で登録する（Renderの設定は不要）
   mailRelay: { url: "", secret: "" },
+  // 勤怠（シフト情報の画面）："日付|スタッフID" -> { clock_in, clock_out（その日0時からの分。翌日は24時以降の数）,
+  //   absent（欠勤）, add_proposals, add_approved, next_proposals, next_approved（追加・次回予約の提案／承認数）, transport（交通費・円）}
+  attendance: new Map(),
   // 管理画面の警告バッジ：この時刻より後に送信失敗したメールだけを数える（メール管理を開くと更新＝既読）
   mailAlertsSeenAt: 0,
   // メニュー（管理画面のメニュー一覧で追加・変更・削除した内容）。null＝まだ変更なし（初期メニューのまま）
@@ -819,6 +822,7 @@ function postSchedule(body) {
       if (remove) {
         if (overlaps(date, staffId, 0, 100000)) throw err(409, "scheduleConflict");
         if (idx >= 0) list.splice(idx, 1);
+        state.attendance.delete(date + "|" + staffId); // シフトを消したら、その日の勤怠の記録も消す
         bump();
         return { ok: true };
       }
@@ -1091,6 +1095,25 @@ function postSchedule(body) {
       state.photos.delete(st.id);
       bump();
       return { ok: true };
+    }
+    case "attendance": {
+      // 勤怠（シフト情報の画面）：出勤・退勤時刻、欠勤、提案・承認数、交通費。シフト（予定）とは別に記録する
+      const { staffId } = body;
+      if (!state.staff.some((s2) => s2.id === staffId)) throw err(400, "invalid");
+      const minOrNull = (v) => (v === null || v === undefined || v === "" ? null : Number(v));
+      const cin = minOrNull(body.clockIn), cout = minOrNull(body.clockOut);
+      for (const v of [cin, cout]) if (v !== null && !(Number.isInteger(v) && v >= 0 && v <= 30 * 60)) throw err(400, "invalid");
+      if (cin !== null && cout !== null && cout <= cin) throw err(400, "invalid");
+      const cnt = (v, max) => { const n = Number(v ?? 0); if (!(Number.isInteger(n) && n >= 0 && n <= max)) throw err(400, "invalid"); return n; };
+      const rec = {
+        clock_in: cin, clock_out: cout, absent: body.absent === true,
+        add_proposals: cnt(body.addProposals, 9999), add_approved: cnt(body.addApproved, 9999),
+        next_proposals: cnt(body.nextProposals, 9999), next_approved: cnt(body.nextApproved, 9999),
+        transport: cnt(body.transport, 1000000), updated_at: Date.now(),
+      };
+      state.attendance.set(date + "|" + staffId, rec);
+      bump();
+      return { ok: true, attendance: rec };
     }
     case "lockStaff": {
       const st = state.staff.find((x) => x.id === body.staffId);
@@ -3650,6 +3673,14 @@ function handleDemoApi(req, res, url) {
     return true;
   }
 
+  if (url.pathname === "/api/demo/attendance" && (req.method === "GET" || req.method === "HEAD")) {
+    const ad = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get("date") || "") ? url.searchParams.get("date") : todayJst();
+    const records = [];
+    for (const [k, v] of state.attendance) { const [d2, sid] = k.split("|"); if (d2 === ad) records.push({ staffId: sid, ...v }); }
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    res.end(req.method === "HEAD" ? undefined : JSON.stringify({ date: ad, records }));
+    return true;
+  }
   if (url.pathname === "/api/demo/locks" && (req.method === "GET" || req.method === "HEAD")) {
     const ld = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get("date") || "") ? url.searchParams.get("date") : todayJst();
     const locks = state.staff.map((st) => ({ id: st.id, name: st.name, locked: staffLockedOn(st.id, ld) ? 1 : 0, date: ld }));

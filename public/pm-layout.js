@@ -2764,3 +2764,275 @@
   }
   document.addEventListener("DOMContentLoaded", ensure);
 })();
+
+// ---- シフト情報（台帳でスタッフ名を押したときの画面）：本物と同じ2列の項目＋勤怠（出勤・退勤・欠勤）----
+// ・左：ID・日付・スタッフ・出勤／退勤時間（勤怠）・シフト開始／終了時間・欠勤・勤務状況・提案／承認数・交通費
+// ・右：スケジュールID・勤務／残業／深夜勤務時間・施術／休憩／業務時間・新規／リピート・一般／指名施術・物販・回数券販売・プリペイド販売
+// ・勤怠はシフト（予定）とは別にサーバーへ保存する（/api/demo/schedule action:"attendance"）
+// ・シフトを削除すると、その日のタイムスケジュールからその人の行が消える（予約・休憩・業務がある日は削除できない）
+(function () {
+  "use strict";
+  const esc = (t) => String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  const dayStart = (d) => Date.parse(d + "T00:00:00+09:00");
+  const minOf = (d, ms) => Math.round((ms - dayStart(d)) / 60000);
+  const ledgerDay = () => document.querySelector(".ledger-date-trigger time")?.getAttribute("datetime") || "";
+  const todayJst = () => new Date(Date.now() + 9 * 3600e3 - 3 * 3600e3).toISOString().slice(0, 10);
+  const nowMinOf = (d) => Math.floor((Date.now() - dayStart(d)) / 60000);
+  const yen = (n) => Math.round(n).toLocaleString("ja-JP") + "円";
+  const overlap = (a1, a2, b1, b2) => Math.max(0, Math.min(a2, b2) - Math.max(a1, b1));
+  const STD = 480; // 所定労働時間（8時間）。超えた分を残業とする
+  const NIGHT = [22 * 60, 29 * 60]; // 深夜（22:00〜翌5:00）
+
+  function ensureStyle() {
+    if (document.getElementById("pm-shiftinfo-style")) return;
+    const st = document.createElement("style");
+    st.id = "pm-shiftinfo-style";
+    st.textContent =
+      "section.ledger-shift-detail.pm-si>h1{background:#f9e0a8;color:#7a5a2c;border:1px solid #e3c27e;border-radius:4px 4px 0 0;margin:0 0 14px;padding:10px 14px;font-size:20px}" +
+      ".pm-si-grid{width:100%;border-collapse:collapse;table-layout:fixed;margin:0 0 16px;font-size:15px}" +
+      ".pm-si-grid th{background:#fff;font-weight:400;text-align:left;padding:10px 12px;border:1px solid #ead9bd;width:25%;color:#222}" +
+      ".pm-si-grid td{padding:6px 10px;border:1px solid #ead9bd;background:#fdfaf5;width:25%}" +
+      ".pm-si-ro{display:block;background:#eee;border:1px solid #d6d6d6;border-radius:4px;padding:8px 10px;color:#555;min-height:20px;font-family:inherit}" +
+      ".pm-si-time{display:inline-flex;align-items:center;gap:6px}" +
+      ".pm-si-time select{font:inherit;font-size:16px;padding:4px 6px;border:1px solid #888;border-radius:6px;background:#fff}" +
+      ".pm-si-shift select{border-color:#e2e2e2;background:#f2f2f2}" +
+      ".pm-si-num{font:inherit;font-size:16px;width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #cfcfcf;border-radius:6px;background:#fff}" +
+      ".pm-si-note{font:inherit;width:100%;box-sizing:border-box;min-height:64px;border:1px solid #cfcfcf;border-radius:6px;padding:8px}" +
+      ".pm-si-chk{display:inline-flex;align-items:center;gap:8px;cursor:pointer}.pm-si-chk input{width:20px;height:20px}" +
+      ".pm-si-actions{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0 4px}" +
+      ".pm-si-actions button{font:inherit;border-radius:6px;padding:10px 26px;cursor:pointer;border:1px solid #bbb;background:#fff}" +
+      ".pm-si-actions .pm-si-save{background:#c5a15e;border-color:#c5a15e;color:#fff;font-weight:700}" +
+      ".pm-si-actions .pm-si-del{border-color:#d9534f;color:#c0392b;margin-left:auto}" +
+      ".pm-si-msg{color:#c0392b;margin:6px 0 0;font-size:14px}" +
+      "@media (max-width:760px){.pm-si-grid,.pm-si-grid tbody,.pm-si-grid tr{display:block}.pm-si-grid tr{display:grid;grid-template-columns:40% 60%}" +
+      ".pm-si-grid th,.pm-si-grid td{width:auto}}" +
+      // シフトのない人の行は隠す（「シフトなしも表示」で表示）
+      "body:not(.pm-show-noshift) .ledger-row.pm-noshift{display:none!important}" +
+      ".pm-noshift-toggle{display:inline-flex;align-items:center;gap:4px;font-size:13px;margin:0 8px;white-space:nowrap;cursor:pointer}";
+    document.head.appendChild(st);
+  }
+
+  // 時刻の選択（時：分）。時は0〜29（翌5時まで）
+  function timeSel(key, min, step) {
+    const h = Math.floor(min / 60), m = min % 60;
+    let ho = "", mo = "";
+    for (let i = 0; i <= 29; i++) ho += '<option value="' + i + '"' + (i === h ? " selected" : "") + ">" + String(i).padStart(2, "0") + "</option>";
+    const mins = [];
+    for (let i = 0; i < 60; i += step) mins.push(i);
+    if (!mins.includes(m)) mins.push(m), mins.sort((a, b) => a - b);
+    for (const i of mins) mo += '<option value="' + i + '"' + (i === m ? " selected" : "") + ">" + String(i).padStart(2, "0") + "</option>";
+    return '<span class="pm-si-time" data-time="' + key + '"><select aria-label="時">' + ho + "</select><b>:</b><select aria-label=\"分\">" + mo + "</select></span>";
+  }
+  const readTime = (box, key) => {
+    const sp = box.querySelector('[data-time="' + key + '"]');
+    if (!sp) return null;
+    const [h, m] = sp.querySelectorAll("select");
+    return Number(h.value) * 60 + Number(m.value);
+  };
+  // 予約台帳（React）の「シフト開始・終了」の今の値（シフト未登録の人を開いたときの初期値に使う）
+  const reactTime = (sec, label) => {
+    const th = [...sec.querySelectorAll(".ledger-detail-columns th")].find((x) => x.textContent.trim() === label);
+    const sels = th ? th.parentElement.querySelectorAll("select") : [];
+    if (sels.length < 2) return null;
+    const v = Number(sels[0].value) * 60 + Number(sels[1].value);
+    return Number.isFinite(v) ? v : null;
+  };
+
+  let current = null; // { key, sec, date, staff, sched, att }
+  async function load(sec, name, date) {
+    const [sched, att] = await Promise.all([
+      fetch("/api/demo/schedule?date=" + date, { cache: "no-store" }).then((r) => r.json()),
+      fetch("/api/demo/attendance?date=" + date, { cache: "no-store" }).then((r) => r.json()),
+    ]);
+    const staff = (sched.staff || []).find((s) => s.name === name);
+    return { sched, att, staff };
+  }
+
+  function compute(c, box) {
+    const { sched, staff, date } = c;
+    const sid = staff.id;
+    const absent = box.querySelector('[name="absent"]').checked;
+    const cin = readTime(box, "in"), cout = readTime(box, "out");
+    const bks = (sched.bookings || []).filter((b) => b.status === "confirmed" && (sched.assignments || []).some((a) => a.booking_id === b.id && a.staff_id === sid));
+    const blocks = (sched.blocks || []).filter((b) => b.staff_id === sid);
+    const mins = (x) => (x.end_at - x.start_at) / 60000;
+    const brk = blocks.filter((b) => b.kind === "break"), work = blocks.filter((b) => b.kind === "work");
+    const brkMin = brk.reduce((a, b) => a + mins(b), 0);
+    const actual = absent || cout <= cin ? 0 : Math.max(0, cout - cin - brkMin);
+    const nightBrk = brk.reduce((a, b) => a + overlap(minOf(date, b.start_at), minOf(date, b.end_at), NIGHT[0], NIGHT[1]), 0);
+    const night = absent || cout <= cin ? 0 : Math.max(0, overlap(cin, cout, NIGHT[0], NIGHT[1]) - nightBrk);
+    const share = (b) => {
+      const n = (sched.assignments || []).filter((a) => a.booking_id === b.id).length || 1;
+      return (b.total || 0) / n;
+    };
+    const nom = bks.filter((b) => b.nominated_staff_id === sid), gen = bks.filter((b) => b.nominated_staff_id !== sid);
+    const sum = (list) => yen(list.reduce((a, b) => a + share(b), 0)) + "(" + list.length + "件/" + list.reduce((a, b) => a + mins(b), 0) + "分)";
+    let status;
+    if (absent) status = "欠勤";
+    else if (date < todayJst()) status = "退勤済み";
+    else if (date > todayJst()) status = "出勤予定";
+    else { const nm = nowMinOf(date); status = nm < cin ? "出勤前" : nm < cout ? "勤務中" : "退勤済み"; }
+    return {
+      work: Math.min(actual, STD) + "分", over: Math.max(0, actual - STD) + "分", night: night + "分",
+      treat: bks.reduce((a, b) => a + mins(b), 0) + "分", brk: brkMin + "分", biz: work.reduce((a, b) => a + mins(b), 0) + "分",
+      newc: bks.filter((b) => b.is_new === 1).length + "人", rep: bks.filter((b) => b.is_new !== 1).length + "人",
+      gen: sum(gen), nom: sum(nom), status,
+    };
+  }
+  function refreshCalc(c) {
+    const box = c.box;
+    const v = compute(c, box);
+    for (const [k, val] of Object.entries(v)) { const el = box.querySelector('[data-calc="' + k + '"]'); if (el) el.textContent = val; }
+  }
+
+  function render(c) {
+    const { sec, sched, att, staff, date } = c;
+    const sid = staff.id;
+    const shift = (sched.shifts || []).find((s) => s.staff_id === sid && s.date === date);
+    const sStart = shift ? minOf(date, shift.start_at) : (reactTime(sec, "シフト開始時間") ?? 600);
+    const sEnd = shift ? minOf(date, shift.end_at) : (reactTime(sec, "シフト終了時間") ?? 1320);
+    const a = (att.records || []).find((r) => r.staffId === sid) || {};
+    const cin = a.clock_in ?? sStart, cout = a.clock_out ?? sEnd;
+    const idx = (sched.staff || []).findIndex((s) => s.id === sid);
+    const dnum = date.replace(/-/g, "");
+    const ro = (k, v) => '<span class="pm-si-ro" data-calc="' + k + '">' + esc(v ?? "") + "</span>";
+    const num = (name, v) => '<input class="pm-si-num" type="number" min="0" step="1" name="' + name + '" value="' + esc(v ?? 0) + '">';
+    const row = (l1, v1, l2, v2) => "<tr><th>" + l1 + "</th><td>" + v1 + "</td><th>" + l2 + "</th><td>" + v2 + "</td></tr>";
+    const box = document.createElement("div");
+    box.className = "pm-si-box";
+    box.innerHTML =
+      '<table class="pm-si-grid"><tbody>' +
+      row("ID", '<span class="pm-si-ro">' + esc(dnum + String(idx + 1).padStart(2, "0")) + "</span>", "スケジュールID", '<span class="pm-si-ro">' + esc(dnum) + "</span>") +
+      row("日付", '<span class="pm-si-ro">' + esc(date) + "</span>", "勤務時間", ro("work")) +
+      row("スタッフ", '<span class="pm-si-ro">' + esc(staff.name) + "</span>", "残業時間", ro("over")) +
+      row("出勤時間", timeSel("in", cin, 1), "深夜勤務時間", ro("night")) +
+      row("退勤時間", timeSel("out", cout, 1), "施術時間", ro("treat")) +
+      row("シフト開始時間", '<span class="pm-si-shift">' + timeSel("start", sStart, 5) + "</span>", "休憩時間", ro("brk")) +
+      row("シフト終了時間", '<span class="pm-si-shift">' + timeSel("end", sEnd, 5) + "</span>", "業務時間", ro("biz")) +
+      row("勤怠", '<label class="pm-si-chk"><input type="checkbox" name="absent"' + (a.absent ? " checked" : "") + "> 欠勤</label>", "新規", ro("newc")) +
+      row("勤務状況", ro("status"), "リピート", ro("rep")) +
+      row("追加提案数", num("addProposals", a.add_proposals), "一般施術", ro("gen")) +
+      row("追加承認数", num("addApproved", a.add_approved), "指名施術", ro("nom")) +
+      row("次回予約提案数", num("nextProposals", a.next_proposals), "物販", '<span class="pm-si-ro">0円</span>') +
+      row("次回予約承認数", num("nextApproved", a.next_approved), "回数券販売", '<span class="pm-si-ro">0円</span>') +
+      row("交通費", num("transport", a.transport), "プリペイド販売", '<span class="pm-si-ro">0円</span>') +
+      '<tr><th>連絡事項</th><td colspan="3"><textarea class="pm-si-note" name="note" maxlength="1000">' + esc(shift ? shift.note : "") + "</textarea></td></tr>" +
+      "</tbody></table>";
+    const actions = document.createElement("div");
+    actions.className = "pm-si-actions";
+    actions.innerHTML = '<button type="button" class="pm-si-save">保存</button><button type="button" class="pm-si-back">戻る</button>' +
+      (shift ? '<button type="button" class="pm-si-del">シフト削除</button>' : "") + '<p class="pm-si-msg" hidden></p>';
+    c.box = box;
+    // 予約台帳（React）の項目と操作ボタンは隠し、こちらの画面に置き換える（「対応メニュー」の一覧はそのまま）
+    const cols = sec.querySelector(".ledger-detail-columns");
+    if (cols) { cols.style.display = "none"; cols.after(box); } else sec.querySelector("h1")?.after(box);
+    const acts = sec.querySelector(".ledger-form-actions");
+    if (acts) acts.style.display = "none";
+    sec.appendChild(actions);
+    sec.classList.add("pm-si");
+    box.addEventListener("change", () => refreshCalc(c));
+    box.addEventListener("input", () => refreshCalc(c));
+    refreshCalc(c);
+    const msg = actions.querySelector(".pm-si-msg");
+    const showMsg = (t) => { msg.textContent = t; msg.hidden = !t; };
+    const close = () => {
+      const back = [...sec.querySelectorAll(".ledger-form-actions button")].find((b) => b.textContent.trim() === "戻る");
+      if (back) back.click();
+      if (typeof window.__pmKickSync === "function") window.__pmKickSync();
+    };
+    const post = async (body) => {
+      const sc = await (await fetch("/api/demo/schedule?date=" + date, { cache: "no-store" })).json();
+      const v = (sc.days || []).find((x) => x.date === date)?.version ?? 0;
+      const r = await fetch("/api/demo/schedule", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date, revision: v, ...body }) });
+      return { ok: r.ok, j: await r.json().catch(() => ({})) };
+    };
+    actions.querySelector(".pm-si-back").addEventListener("click", close);
+    actions.querySelector(".pm-si-save").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      const start = readTime(box, "start"), end = readTime(box, "end"), cin2 = readTime(box, "in"), cout2 = readTime(box, "out");
+      if (end <= start) return showMsg("シフト終了時間は、シフト開始時間より後にしてください。");
+      if (cout2 <= cin2) return showMsg("退勤時間は、出勤時間より後にしてください。");
+      const n = (k) => Number(box.querySelector('[name="' + k + '"]').value || 0);
+      for (const k of ["addProposals", "addApproved", "nextProposals", "nextApproved", "transport"]) {
+        if (!(Number.isInteger(n(k)) && n(k) >= 0)) return showMsg("数は0以上の整数で入力してください。");
+      }
+      btn.disabled = true; showMsg("");
+      try {
+        const r1 = await post({ action: "shift", staffId: sid, start, end, note: box.querySelector('[name="note"]').value });
+        if (!r1.ok) { showMsg(r1.j.error === "scheduleConflict" ? "予約・休憩・業務がシフトの時間の外に出るため、保存できません。" : "シフトを保存できませんでした。"); btn.disabled = false; return; }
+        const r2 = await post({ action: "attendance", staffId: sid, clockIn: cin2, clockOut: cout2, absent: box.querySelector('[name="absent"]').checked,
+          addProposals: n("addProposals"), addApproved: n("addApproved"), nextProposals: n("nextProposals"), nextApproved: n("nextApproved"), transport: n("transport") });
+        if (!r2.ok) { showMsg("勤怠を保存できませんでした。"); btn.disabled = false; return; }
+        close();
+      } catch { showMsg("保存できませんでした。通信を確認してください。"); btn.disabled = false; }
+    });
+    actions.querySelector(".pm-si-del")?.addEventListener("click", async (e) => {
+      if (!window.confirm(staff.name + " さんの " + date + " のシフトを削除しますか？\n削除すると、この日のタイムスケジュールから " + staff.name + " さんの行が消えます。\n（予約・休憩・業務がある日は削除できません）")) return;
+      const btn = e.currentTarget;
+      btn.disabled = true; showMsg("");
+      try {
+        const r = await post({ action: "shift", staffId: sid, remove: true });
+        if (!r.ok) { showMsg(r.j.error === "scheduleConflict" ? "この日は予約・休憩・業務があるため、シフトを削除できません。先に予約などを移動・取消してください。" : "シフトを削除できませんでした。"); btn.disabled = false; return; }
+        close();
+      } catch { showMsg("削除できませんでした。通信を確認してください。"); btn.disabled = false; }
+    });
+  }
+
+  async function tickDetail() {
+    const sec = document.querySelector("section.ledger-shift-detail");
+    if (!sec) { current = null; return; }
+    const th = [...sec.querySelectorAll(".ledger-detail-columns th")].find((x) => x.textContent.trim() === "スタッフ");
+    const name = th ? th.nextElementSibling?.textContent.trim() : "";
+    const date = ledgerDay();
+    if (!name || !date) return;
+    const key = name + "|" + date;
+    if (current && current.key === key && current.sec === sec && sec.contains(current.box)) return;
+    if (current && current.loading === key) return;
+    ensureStyle();
+    current = { key, sec, date, loading: key };
+    try {
+      const { sched, att, staff } = await load(sec, name, date);
+      if (!staff || !document.body.contains(sec)) { current = null; return; }
+      sec.querySelectorAll(".pm-si-box, .pm-si-actions").forEach((x) => x.remove());
+      current = { key, sec, date, sched, att, staff };
+      render(current);
+    } catch { current = null; }
+  }
+
+  // シフトのない人（予約・休憩・業務もない人）の行は、タイムスケジュールに出さない
+  function tickRows() {
+    const bar = document.querySelector(".ledger-toolbar");
+    if (bar && !bar.querySelector(".pm-noshift-toggle")) {
+      ensureStyle();
+      const lab = document.createElement("label");
+      lab.className = "pm-noshift-toggle";
+      let on = false;
+      try { on = localStorage.getItem("pm-show-noshift") === "1"; } catch {}
+      lab.innerHTML = '<input type="checkbox"' + (on ? " checked" : "") + "> シフトなしも表示";
+      lab.title = "シフトを削除した人・シフトのない人も表示して、シフトを入れられるようにする";
+      document.body.classList.toggle("pm-show-noshift", on);
+      lab.querySelector("input").addEventListener("change", (e) => {
+        document.body.classList.toggle("pm-show-noshift", e.target.checked);
+        try { localStorage.setItem("pm-show-noshift", e.target.checked ? "1" : "0"); } catch {}
+      });
+      const sel = bar.querySelector('select[aria-label="スタッフ絞り込み"]');
+      if (sel) sel.before(lab); else bar.appendChild(lab);
+    }
+    document.querySelectorAll(".ledger-row").forEach((row) => {
+      const small = row.querySelector(".ledger-staff-cell small");
+      if (!small) return;
+      const noShift = small.getAttribute("title") === "シフト未登録";
+      const busy = !!row.querySelector(".ledger-event");
+      row.classList.toggle("pm-noshift", noShift && !busy);
+    });
+  }
+
+  setInterval(() => { try { tickRows(); tickDetail(); } catch {} }, 400);
+  // 台帳が描き直された瞬間にも反映する（シフト情報の画面から戻った直後に、シフトのない人が一瞬見えないように）
+  let rowQueued = false;
+  new MutationObserver(() => {
+    if (rowQueued) return;
+    rowQueued = true;
+    requestAnimationFrame(() => { rowQueued = false; try { tickRows(); } catch {} });
+  }).observe(document.documentElement, { childList: true, subtree: true });
+})();
