@@ -102,7 +102,9 @@ function sendFile(res, file, status, type, head, url, req) {
         const versioned = !!(url && url.searchParams?.has("v"));
         const code = /\.(m?js|css|json)$/i.test(file);
         const long = versioned || (/\/(assets|_next)\//.test(file) && !code);
-        const cache = { "Cache-Control": long ? "public, max-age=86400" : code ? "no-cache" : "public, max-age=3600", "Last-Modified": new Date(mtime).toUTCString() };
+        // メニューの小さい写真（public/thumbs）は、元の写真の中身の印がファイル名に入っているので、30日使い回してよい
+        const thumb = /[\\/]public[\\/]thumbs[\\/]/.test(file);
+        const cache = { "Cache-Control": thumb ? "public, max-age=2592000, immutable" : long ? "public, max-age=86400" : code ? "no-cache" : "public, max-age=3600", "Last-Modified": new Date(mtime).toUTCString() };
         if (ims && ims >= mtime) {
           res.writeHead(304, cache);
           return res.end();
@@ -127,6 +129,9 @@ function sendFile(res, file, status, type, head, url, req) {
           /nav:\{"pathname":"[^"]*","searchParams":\[(?:\[[^\]]*\],?)*\]\}/,
           () => "nav:" + nav
         );
+        // 使っていないフォント（Geist・Geist Mono）の先読みを外す。文字は端末のフォントで表示していて、
+        // この2つはどこにも使われていないのに、初めて開くたびに約52KBを読み込んでいた（見た目は変わらない）
+        text = text.replace(/<link rel="preload" href="\/_next\/static\/_vinext_fonts\/[^"]*" as="font"[^>]*>\n?/g, "");
         // 日時選択ページ：保存HTMLの空き状況表の見出し（日付・曜日）は保存した日（9/24〜）のまま。
         // ブラウザ側は「今日（3時切替）から7日分」を描くため食い違い、Reactがエラー（#418）を出して
         // 画面を描き直していた。ブラウザと同じ計算で、見出しを今日からの7日分に書き換えて返す
@@ -339,9 +344,45 @@ const IMAGE_CDN = process.env.IMAGE_CDN !== undefined ? process.env.IMAGE_CDN.re
 // 通信量を減らす：文字のデータ（HTML・JS・CSS・JSON・SVG）は gzip で圧縮して返す
 // （無料ホスティングの通信量の上限対策。リアルタイム通知（SSE）・画像・ファイルの流し込みはそのまま）
 const zlib = require("zlib");
+const crypto = require("crypto");
 const COMPRESSIBLE = /^(text\/(?!event-stream)|application\/(json|javascript|xml|manifest\+json)|image\/svg)/;
+// 圧縮の結果を覚えて使い回す（同じ中身を毎回圧縮し直さない＝速い）。brotli が使えるブラウザには brotli（gzip より約16%小さい）。
+// ・画面の部品などのファイル（Last-Modified つき）は、まず素早く圧縮して返し、裏でいちばん小さくなる設定で圧縮し直して入れ替える
+// ・覚える量は合計40MBまで（古いものから捨てる）
+const ZCACHE_MAX = 40 * 1024 * 1024;
+const zcache = new Map();
+let zcacheBytes = 0;
+function zcachePut(key, buf) {
+  const old = zcache.get(key);
+  if (old) { zcacheBytes -= old.length; zcache.delete(key); }
+  zcache.set(key, buf);
+  zcacheBytes += buf.length;
+  while (zcacheBytes > ZCACHE_MAX && zcache.size) {
+    const [k, v] = zcache.entries().next().value;
+    zcache.delete(k);
+    zcacheBytes -= v.length;
+  }
+}
+const brOpts = (q, n) => ({ params: { [zlib.constants.BROTLI_PARAM_QUALITY]: q, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: n } });
+const zbest = new Set(); // いちばん小さい設定での圧縮し直しが済んだ（または作業中の）もの
+function compressCached(buf, enc, isStatic) {
+  const key = enc + ":" + crypto.createHash("sha1").update(buf).digest("base64");
+  const hit = zcache.get(key);
+  if (hit) { zcache.delete(key); zcache.set(key, hit); return hit; } // よく使うものは捨てにくく
+  const out = enc === "br" ? zlib.brotliCompressSync(buf, brOpts(5, buf.length)) : zlib.gzipSync(buf, { level: 6 });
+  zcachePut(key, out);
+  if (isStatic && !zbest.has(key)) {
+    zbest.add(key);
+    const done = (err, best) => { if (!err && best && best.length < out.length && zcache.has(key)) zcachePut(key, best); };
+    if (enc === "br") zlib.brotliCompress(buf, brOpts(11, buf.length), done);
+    else zlib.gzip(buf, { level: 9 }, done);
+  }
+  return out;
+}
 function withCompression(req, res) {
-  if (!/\bgzip\b/.test(String(req.headers["accept-encoding"] || ""))) return;
+  const ae = String(req.headers["accept-encoding"] || "");
+  const enc = /\bbr\b/.test(ae) ? "br" : /\bgzip\b/.test(ae) ? "gzip" : "";
+  if (!enc) return;
   const writeHead = res.writeHead, write = res.write, end = res.end;
   let held = null, streaming = false;
   const flush = (self) => { if (held) { const h = held; held = null; writeHead.apply(self, h); } };
@@ -360,8 +401,8 @@ function withCompression(req, res) {
       const buf = chunk == null ? null : Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk), typeof encoding === "string" ? encoding : "utf8");
       if (buf && buf.length > 1024 && status === 200 && req.method !== "HEAD" && !this.getHeader("Content-Encoding") &&
           COMPRESSIBLE.test(String(this.getHeader("Content-Type") || ""))) {
-        const gz = zlib.gzipSync(buf, { level: 6 });
-        this.setHeader("Content-Encoding", "gzip");
+        const gz = compressCached(buf, enc, !!this.getHeader("Last-Modified"));
+        this.setHeader("Content-Encoding", enc);
         this.setHeader("Vary", "Accept-Encoding");
         this.setHeader("Content-Length", gz.length);
         writeHead.apply(this, head);

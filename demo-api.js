@@ -154,15 +154,23 @@ function authLogPush(entry) {
 // 接続が切れてもEventSourceが自動再接続し、再接続時に受信側が再同期する。
 let sseSeq = 0;
 const sseClients = new Set(); // 認証済み管理画面の接続（res オブジェクト）
+// 予約サイト（お客様）向けの「変わった」合図（/api/live）。中身は版の番号だけで、予約の内容は一切送らない。
+// 予約サイトは合図が来たときだけ空き状況を取り直す（3秒ごとに取り直していた通信をなくす）。つなげる数は上限つき
+const publicSse = new Set();
+const PUBLIC_SSE_MAX = 400;
 function sseTouch() {
   sseSeq++;
-  for (const res of sseClients) {
-    try { res.write(`data: ${sseSeq}\n\n`); } catch { sseClients.delete(res); }
+  for (const set of [sseClients, publicSse]) {
+    for (const res of set) {
+      try { res.write(`data: ${sseSeq}\n\n`); } catch { set.delete(res); }
+    }
   }
 }
 const sseKeepAlive = setInterval(() => {
-  for (const res of sseClients) {
-    try { res.write(":ka\n\n"); } catch { sseClients.delete(res); }
+  for (const set of [sseClients, publicSse]) {
+    for (const res of set) {
+      try { res.write(":ka\n\n"); } catch { set.delete(res); }
+    }
   }
 }, 20000);
 sseKeepAlive.unref?.();
@@ -3189,6 +3197,25 @@ function handleDemoApi(req, res, url) {
     res.write(`retry: 2000\ndata: ${sseSeq}\n\n`); // 接続直後に現在の版を知らせる
     sseClients.add(res);
     req.on("close", () => sseClients.delete(res));
+    return true;
+  }
+
+  // 予約サイト（お客様）向けの「変わった」合図。ログイン不要・中身は版の番号だけ（上の publicSse の説明）
+  if (url.pathname === "/api/live" && req.method === "GET") {
+    if (publicSse.size >= PUBLIC_SSE_MAX) {
+      res.writeHead(503, { "Content-Type": "text/plain", "Retry-After": "60" });
+      res.end("busy");
+      return true;
+    }
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-store",
+      "Connection": "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+    res.write(`retry: 5000\ndata: ${sseSeq}\n\n`); // 接続直後に今の版を知らせる
+    publicSse.add(res);
+    req.on("close", () => publicSse.delete(res));
     return true;
   }
 
