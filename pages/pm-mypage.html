@@ -401,14 +401,16 @@
       "</div>" +
       '<div class="card"><h2>' + esc(tr("会員情報の変更")) + "</h2>" +
       '<form id="mp-profile">' +
-      "<label>" + t.name + '<input name="name" ' + inp + ' value="' + esc(member.name || "") + '"></label>' +
-      "<label>" + esc(tr("電話番号")) + '<input name="phone" ' + inp + ' value="' + esc(member.phone || "") + '"></label>' +
+      // ブラウザの自動入力が正しく働くよう、入力欄の意味（name・tel）を付ける。ここで変えた内容は次回からの予約フォームに自動で入る
+      '<p style="color:#6b7280;font-size:13px;line-height:1.7;margin:0 0 10px">' + esc(tr("ここで変更したお名前・電話番号は、次回からのご予約で自動で入力されます（これまでのご予約の記録は変わりません）。")) + "</p>" +
+      "<label>" + t.name + '<input name="name" autocomplete="name" maxlength="120" ' + inp + ' value="' + esc(member.name || "") + '"></label>' +
+      "<label>" + esc(tr("電話番号")) + '<input name="phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="40" ' + inp + ' value="' + esc(member.phone || "") + '"></label>' +
       '<div class="btnrow"><button type="submit" class="gold" style="border:0;cursor:pointer">' + esc(tr("保存する")) + "</button></div>" +
       "</form></div>" +
       '<div class="card"><h2>' + esc(tr("パスワードの変更")) + "</h2>" +
       '<form id="mp-pass">' +
-      "<label>" + esc(tr("現在のパスワード")) + '<input name="pass" type="password" ' + inp + "></label>" +
-      "<label>" + esc(tr("新しいパスワード（6文字以上）")) + '<input name="newPass" type="password" ' + inp + "></label>" +
+      "<label>" + esc(tr("現在のパスワード")) + '<input name="pass" type="password" autocomplete="current-password" ' + inp + "></label>" +
+      "<label>" + esc(tr("新しいパスワード（6文字以上）")) + '<input name="newPass" type="password" autocomplete="new-password" ' + inp + "></label>" +
       '<div class="btnrow"><button type="submit" class="gold" style="border:0;cursor:pointer">' + esc(tr("変更する")) + "</button></div>" +
       "</form></div>" +
       '<div class="card"><div class="btnrow"><button type="button" class="cancel" id="mp-logout">' + esc(tr("ログアウト")) + "</button></div></div>";

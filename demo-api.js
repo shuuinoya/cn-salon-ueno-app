@@ -2950,6 +2950,13 @@ function createPublicBooking(body, member) {
   state.bookingIndex.set(id, date);
   const newBk = ev.bookings.find((b) => b.id === id);
   if (member) memberAttachBooking(member, newBk); // ログイン中なら会員の予約として記録（マイページに出る）
+  // 予約フォームで「入力したお名前・電話番号で会員情報も更新する」を選んだとき：ログイン中の本人の会員情報だけを更新する
+  // （メールアドレスはログインIDなので変えない。これまでの予約の記録は予約したときの内容のまま）
+  if (member && body.saveProfile === true) {
+    const nm = String(newBk.name || "").trim().slice(0, 120), ph = String(newBk.phone || "").trim().slice(0, 40);
+    if (nm) member.name = nm;
+    if (ph) member.phone = ph;
+  }
   queueBookingMails(newBk); // 完了メール＋通知＋双方のリマインド
   ensureDay(date).version++; sseTouch();
   // 日時変更：新しい予約が成立したので元の予約を取り消す（回数券は返却→新予約で再使用済み）
@@ -4167,6 +4174,11 @@ function handleDemoApi(req, res, url) {
     if (!m) {
       res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
       return res.end(req.method === "HEAD" ? undefined : JSON.stringify({ member: null }));
+    }
+    // ?lite=1：予約フォームの自動入力用に、ログイン中の本人の会員情報（お名前・メール・電話番号）だけを返す（予約・回数券は付けない＝軽い）
+    if (url.searchParams.get("lite") === "1") {
+      res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+      return res.end(req.method === "HEAD" ? undefined : JSON.stringify({ member: memberPublic(m) }));
     }
     const bookings = [];
     for (const id of m.bookings) {

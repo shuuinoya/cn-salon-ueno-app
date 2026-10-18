@@ -103,6 +103,9 @@
         // 日時変更中（マイページの「日時を変更」から来た場合）：元の予約IDを添える
         const rs = rescheduleId();
         if (rs) { b0.rescheduleId = rs; changed = true; }
+        // 「入力したお名前・電話番号で会員情報も更新する」を選んだとき（ログイン中の本人だけ。サーバー側で確認して更新）
+        const ps = document.getElementById("fm-prof-save");
+        if (ps && ps.checked && ps.closest("#fm-prof-row")?.style.display !== "none") { b0.saveProfile = true; changed = true; }
         if (changed) init = { ...init, body: JSON.stringify(b0) };
       }
     } catch {}
@@ -684,6 +687,73 @@
     dl.before(p);
   }
 
+  // ---- 予約フォーム（お客様情報）の自動入力：ログイン中の会員 ----
+  // ・予約確認の画面を開いたときに、最新の会員情報（お名前・メール・電話番号）をサーバーから取り、空いている欄にだけ入れる
+  //   （お客様がすでに入力・修正した欄は上書きしない。入れた値はその場で確認・修正できる）
+  // ・会員情報に無い項目（お名前・電話番号）は、予約が完了すると会員情報にも保存される（サーバーの memberAttachBooking）ことを案内する
+  // ・登録済みの内容と違うお名前・電話番号を入れたときだけ「会員情報も更新する」を出す（最初は選ばれていない。選ぶとサーバーが本人の会員情報を更新）
+  // ・未ログインのお客様は何もしない（入力欄の autocomplete＝name/email/tel で、ブラウザの自動入力が使える）
+  let prefillMember; // undefined＝まだ取っていない／null＝未ログイン／会員情報
+  let prefillLoading = false;
+  async function loadPrefillMember() {
+    prefillLoading = true;
+    try {
+      const j = await (await origFetch("/api/member/me?lite=1", { cache: "no-store", credentials: "same-origin" })).json();
+      prefillMember = j && j.member ? j.member : null;
+    } catch { prefillMember = null; }
+    prefillLoading = false;
+  }
+  function decorateMemberPrefill() {
+    if (location.pathname !== "/book/confirm") { prefillMember = undefined; return; } // 次に開いたときは取り直す（最新の会員情報）
+    const form = document.querySelector("form.booking-form");
+    if (!form || !form.elements.name || !form.elements.email || !form.elements.phone) return;
+    const fields = ["name", "email", "phone"].map((k) => form.elements[k]);
+    // お客様が自分で入力・修正した欄には印をつける（自動入力で上書きしない）
+    if (!form.dataset.fmWatch) {
+      form.dataset.fmWatch = "1";
+      for (const el of fields) el.addEventListener("input", (e) => { if (e.isTrusted) el.dataset.fmTouched = "1"; updateProfSave(); });
+    }
+    if (prefillMember === undefined) { if (!prefillLoading) loadPrefillMember(); return; }
+    const m = prefillMember;
+    if (!m) return;
+    if (!form.dataset.fmFilled) {
+      form.dataset.fmFilled = "1";
+      const want = { name: m.name || "", email: m.email || "", phone: m.phone || "" };
+      for (const el of fields) if (!el.value && !el.dataset.fmTouched && want[el.name]) el.value = want[el.name];
+    }
+    const h3 = form.querySelector("h3");
+    if (h3 && !document.getElementById("fm-prefill-note")) {
+      const p = document.createElement("p");
+      p.id = "fm-prefill-note";
+      p.className = "privacy-note";
+      const missing = !m.name || !m.phone;
+      p.textContent = T("会員情報から入力しました。内容をご確認のうえ、必要なら修正してください。") +
+        (missing ? (["ja", "zh"].includes(curLang()) ? "" : " ") + T("会員情報に未登録のお名前・電話番号は、ご予約が完了すると会員情報にも保存され、次回から自動で入力されます。") : "");
+      h3.after(p);
+    }
+    if (!document.getElementById("fm-prof-row") && m.name && m.phone) {
+      const row = document.createElement("label");
+      row.id = "fm-prof-row";
+      row.className = "consent-row";
+      row.style.display = "none"; // 登録済みと違う内容を入れたときだけ出す（consent-row は display:flex のため hidden 属性では隠れない）
+      row.innerHTML = '<input type="checkbox" id="fm-prof-save"/><span>' + esc2(T("入力したお名前・電話番号で会員情報も更新する（次回から自動で入力されます）")) + "</span>";
+      const phoneLabel = form.elements.phone.closest("label");
+      if (phoneLabel) phoneLabel.after(row);
+    }
+    updateProfSave();
+  }
+  // 登録済みの内容と違うときだけ「会員情報も更新する」を出す（同じなら隠して、選択も外す）
+  function updateProfSave() {
+    const row = document.getElementById("fm-prof-row");
+    const form = document.querySelector("form.booking-form");
+    const m = prefillMember;
+    if (!row || !form || !m) return;
+    const differs = form.elements.name.value.trim() !== (m.name || "") || form.elements.phone.value.trim() !== (m.phone || "");
+    const want = differs ? "" : "none";
+    if (row.style.display !== want) row.style.display = want;
+    if (!differs) row.querySelector("input").checked = false;
+  }
+
   // ---- スタッフ紹介ページの「指名して予約する」：/book?staffId=スタッフID で来たとき ----
   // メニュー一覧の上に指名するスタッフを出し、そのスタッフが担当できるメニューだけを表示する。
   // メニューを選んだら、日時選択へ指名つき（staffId）で進む（日時選択・予約確認・指名料は予約画面で指名したときと同じ）
@@ -773,10 +843,12 @@
 
   if (I18N) I18N.onChange(() => {
     if (location.pathname.startsWith("/book/complete")) { location.reload(); return; }
-    for (const id of ["fm-notice", "fm-terms", "fm-tkbanner", "fm-ticket-pick", "fm-reschedule-bar", "fm-doc-modal", "fm-nom-bar"]) document.getElementById(id)?.remove();
+    for (const id of ["fm-notice", "fm-terms", "fm-tkbanner", "fm-ticket-pick", "fm-reschedule-bar", "fm-doc-modal", "fm-nom-bar", "fm-prefill-note"]) document.getElementById(id)?.remove();
+    // 「会員情報も更新する」は選択の状態を残したまま文言だけ入れ替える
+    { const row = document.getElementById("fm-prof-row"); const sp = row && row.querySelector("span"); if (sp) sp.textContent = T("入力したお名前・電話番号で会員情報も更新する（次回から自動で入力されます）"); }
     document.querySelectorAll(".fm-note").forEach((n) => n.remove());
     window.__fmTicketSel = null;
   });
-  setInterval(() => { if (!canTouch()) return; apply(); decorateConsent(); decorateComplete(); decorateTicketBanner(); decorateTicketPick(); decorateTicketComplete(); decorateReschedule(); decorateRescheduleComplete(); decorateNomination(); }, 700);
+  setInterval(() => { if (!canTouch()) return; apply(); decorateConsent(); decorateComplete(); decorateTicketBanner(); decorateTicketPick(); decorateTicketComplete(); decorateReschedule(); decorateRescheduleComplete(); decorateNomination(); decorateMemberPrefill(); }, 700);
   setInterval(() => { if (!document.hidden) load(); }, 60000);
 })();
