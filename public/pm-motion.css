@@ -68,3 +68,29 @@
 @keyframes pm-fade-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes pm-drop { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 @keyframes pm-toast-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* ---- 操作の感度（iPad・スマホ・パソコン共通） ----
+   ・すばやく2回押しても画面が拡大されない（押した瞬間に反応する）。台帳の枠のドラッグには影響しない（:where＝強さ0。既存の指定が優先）
+   ・押したときに出る灰色の四角い光は消す（押すと縮む動きで、押したことが分かる） */
+:where(button, a, summary, label, select, [role="button"]) {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* 押した瞬間はすぐ縮み（0.04秒）、離すとなめらかに戻る */
+  :where(button, summary, [role="button"]):not(:disabled):not(.ledger-event):not(#pm-sync-pending):active {
+    transition-duration: 0.04s;
+  }
+}
+
+/* マウスを乗せたとき（マウス・トラックパッドの端末だけ。iPadで押したあとに色が残らないように） */
+@media (hover: hover) and (pointer: fine) {
+  /* 左の縦のボタン（予約・開く・返客・会計・顧客・カード） */
+  main.ledger-app .ledger-rail button:not(:disabled):hover { background: #fff3ea; }
+  /* 上の操作ボタン（前日・翌日・日付・表示の切り替えなど。再読込の丸い矢印は除く） */
+  main.ledger-app .ledger-toolbar button:not(:disabled):not(.ledger-refresh):hover { filter: brightness(0.95); }
+  main.ledger-app .ledger-toolbar .ledger-refresh:not(:disabled):hover { filter: brightness(1.15); }
+  /* 横の欄の一覧・ボタン */
+  main.ledger-app .ledger-side button:not(:disabled):hover { filter: brightness(0.97); }
+}

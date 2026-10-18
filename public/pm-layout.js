@@ -237,6 +237,7 @@
           e.stopPropagation();
           let menu = document.getElementById("pm-usermenu");
           if (menu) { menu.remove(); return; }
+          window.__pmCloseMenus?.(); // ほかのメニューが開いていたら閉じる
           menu = document.createElement("div");
           menu.id = "pm-usermenu";
           const item = document.createElement("button");
@@ -251,6 +252,7 @@
           menu.style.top = r.bottom + 6 + "px";
           menu.style.right = Math.max(8, window.innerWidth - r.right) + "px";
           const close = (ev) => {
+            if (!ev.isTrusted) return; // 自動の再読込などでは閉じない
             if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener("click", close); }
           };
           setTimeout(() => document.addEventListener("click", close), 0);
@@ -573,6 +575,7 @@
         e.stopPropagation();
         let menu = document.getElementById("pm-dailymenu");
         if (menu) { menu.remove(); return; }
+        window.__pmCloseMenus?.(); // 予約台帳などほかのメニューが開いていたら閉じる
         menu = document.createElement("div");
         menu.id = "pm-dailymenu";
         const items = [
@@ -593,6 +596,7 @@
         menu.style.top = r.bottom + "px";
         menu.style.left = r.left + "px";
         const close = (ev) => {
+          if (!ev.isTrusted) return; // 自動の再読込などでは閉じない
           if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener("click", close); }
         };
         setTimeout(() => document.addEventListener("click", close), 0);
@@ -747,15 +751,24 @@
   // 1つ開いたら他は閉じる／外側をクリックしたら閉じる／項目を選んだら閉じる
   if (!window.__pmMenuOne) {
     window.__pmMenuOne = true;
+    // 上部のメニュー（予約台帳・店舗情報などの開閉メニュー／日次管理／右上のログアウト）は、どれを開いても
+    // ほかに開いているメニューを必ず閉じる（前のメニューが出たまま重ならない）。except＝今開くもの
+    window.__pmCloseMenus = (except) => {
+      document.querySelectorAll("details.ledger-nav-menu[open]").forEach((o) => { if (o !== except) o.open = false; });
+      for (const id of ["pm-dailymenu", "pm-usermenu"]) {
+        const m = document.getElementById(id);
+        if (m && m !== except) m.remove();
+      }
+    };
     document.addEventListener("toggle", (e) => {
       const d = e.target;
       if (!(d instanceof HTMLDetailsElement) || !d.open) return;
       if (!d.classList.contains("ledger-nav-menu")) return;
-      document.querySelectorAll("details.ledger-nav-menu[open]").forEach((o) => {
-        if (o !== d) o.open = false;
-      });
+      window.__pmCloseMenus(d);
     }, true); // toggleイベントはバブルしないためcaptureで受ける
     document.addEventListener("click", (e) => {
+      // 画面が自動で押すボタン（新しい予約が入ったときの台帳の再読込など）では閉じない。人が押したときだけ
+      if (!e.isTrusted) return;
       const inMenu = e.target.closest && e.target.closest("details.ledger-nav-menu");
       if (!inMenu) {
         document.querySelectorAll("details.ledger-nav-menu[open]").forEach((o) => { o.open = false; });
@@ -2746,8 +2759,18 @@
     };
     try {
       const es = new EventSource("/api/demo/events");
-      es.onmessage = () => { sseOk = true; kick(); if (window.__pmCheckNewBookings) setTimeout(window.__pmCheckNewBookings, 400); };
-      es.onopen = kick; // 再接続時は必ず最新へ再同期（切断中の変更を取りこぼさない）
+      // 開いた直後の最初の合図が、ページと一緒に届いたデータを作ったときの番号と同じなら、その間に変更はない＝取り直さない
+      // （これまでは開くたびに台帳・受付停止・お知らせなどを2回ずつ取り直していた）。違えばすぐ取り直す
+      let firstMsg = true, opened = false;
+      es.onmessage = (ev) => {
+        sseOk = true;
+        const same = firstMsg && window.__cnBootSeqInit != null && String(ev.data) === window.__cnBootSeqInit;
+        firstMsg = false;
+        if (!same) kick();
+        if (window.__pmCheckNewBookings) setTimeout(window.__pmCheckNewBookings, 400);
+      };
+      // 再接続時は必ず最新へ再同期（切断中の変更を取りこぼさない）。最初の接続は上の最初の合図で判断する
+      es.onopen = () => { if (opened || window.__cnBootSeqInit == null) kick(); opened = true; };
       // サーバーは接続した直後に必ず1通送るため、10秒たっても何も届かなければ通知が使えない接続と判断する
       setTimeout(() => { if (!sseOk) { try { es.close(); } catch {} startPolling(); } }, 10000);
     } catch { startPolling(); }

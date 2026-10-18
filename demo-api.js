@@ -153,16 +153,20 @@ function authLogPush(entry) {
 // 同じ通知が複数回届いても再取得するだけなので冪等）。
 // 接続が切れてもEventSourceが自動再接続し、再接続時に受信側が再同期する。
 let sseSeq = 0;
+// 合図の中身は「このサーバーの起動ごとの印.番号」（再起動で番号が0に戻っても、前の起動の番号と取り違えない）
+const SSE_INST = Date.now().toString(36);
+const sseTag = () => SSE_INST + "." + sseSeq;
 const sseClients = new Set(); // 認証済み管理画面の接続（res オブジェクト）
 // 予約サイト（お客様）向けの「変わった」合図（/api/live）。中身は版の番号だけで、予約の内容は一切送らない。
 // 予約サイトは合図が来たときだけ空き状況を取り直す（3秒ごとに取り直していた通信をなくす）。つなげる数は上限つき
 const publicSse = new Set();
 const PUBLIC_SSE_MAX = 400;
 function sseTouch() {
+  require("./persist").requestSave(); // 変わった内容は合図と同時にディスクへ保存する（パソコンを閉じても消えない）
   sseSeq++;
   for (const set of [sseClients, publicSse]) {
     for (const res of set) {
-      try { res.write(`data: ${sseSeq}\n\n`); } catch { set.delete(res); }
+      try { res.write(`data: ${sseTag()}\n\n`); } catch { set.delete(res); }
     }
   }
 }
@@ -3097,6 +3101,8 @@ function reportStats(date) {
 
 // server.js から呼ばれる入口。処理した場合は true を返す。
 function handleDemoApi(req, res, url) {
+  // 変更の操作（予約・スタッフ情報・シフト・設定・会員情報など、GET以外）は、返事を返した直後にディスクへ保存する
+  if (req.method !== "GET" && req.method !== "HEAD") res.once("finish", () => require("./persist").requestSave());
   if (url.pathname === "/api/demo/login" && req.method === "POST") {
     let raw = "";
     req.on("data", (c) => { raw += c; if (raw.length > 1e4) req.destroy(); });
@@ -3201,7 +3207,7 @@ function handleDemoApi(req, res, url) {
       "Connection": "keep-alive",
       "X-Accel-Buffering": "no",
     });
-    res.write(`retry: 2000\ndata: ${sseSeq}\n\n`); // 接続直後に現在の版を知らせる
+    res.write(`retry: 2000\ndata: ${sseTag()}\n\n`); // 接続直後に現在の版を知らせる
     sseClients.add(res);
     req.on("close", () => sseClients.delete(res));
     return true;
@@ -3220,7 +3226,7 @@ function handleDemoApi(req, res, url) {
       "Connection": "keep-alive",
       "X-Accel-Buffering": "no",
     });
-    res.write(`retry: 5000\ndata: ${sseSeq}\n\n`); // 接続直後に今の版を知らせる
+    res.write(`retry: 5000\ndata: ${sseTag()}\n\n`); // 接続直後に今の版を知らせる
     publicSse.add(res);
     req.on("close", () => publicSse.delete(res));
     return true;
@@ -4511,4 +4517,7 @@ function handleDemoApi(req, res, url) {
   return true;
 }
 
-module.exports = { handleDemoApi, isAdminSession, clearSession, ready: persistReady, nominationOf };
+// ページと一緒に返すデータ（server.js の pageBoot）用：今の「変わった」合図の番号と、メニュー名
+function liveSeq() { return sseTag(); }
+function courseNameOf(id) { const c = courseStore.get(String(id || "")); return c ? String(c.name || "") : ""; }
+module.exports = { handleDemoApi, isAdminSession, clearSession, ready: persistReady, nominationOf, liveSeq, courseNameOf };

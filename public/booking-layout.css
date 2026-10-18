@@ -33,3 +33,51 @@
     filter: brightness(0.97);
   }
 }
+
+/* ---- 操作の感度（スマホ・タブレット・パソコン共通） ----
+   ・すばやく2回押しても画面が拡大されない（押した瞬間に反応する。ピンチでの拡大はそのまま使える）
+   ・押したときに出る灰色の四角い光は、押すと縮む動き（上）があるボタン・行だけ消す */
+a, button, summary, label, select, [role="button"], .menu-row, .slot-open { touch-action: manipulation; }
+.booking-button, .side-submit, .login-button, .language-button, .language-menu button, .nav-item, .mobile-item,
+.menu-row, .staff-select-trigger, .staff-picker-item, .staff-picker-footer button, .slot-open, .native-calendar button,
+.booking-form button, .st-photo, .st-more, .st-d-close, #fm-nom-bar a, .fm-agree, .calendar-toolbar button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* 押した瞬間はすぐ縮み（0.04秒）、離すとゆっくり戻る（上の 0.12秒）＝指に吸いつくような反応 */
+  .booking-button:active, .side-submit:active, .login-button:active, .language-button:active, .language-menu button:active,
+  .nav-item:active, .mobile-item:active, .menu-row:active, .staff-select-trigger:active, .staff-picker-item:active,
+  .staff-picker-footer button:active, .slot-open:active, .native-calendar button:active, .booking-form button:active,
+  .back-to-calendar:active, .st-photo:active, .st-more:active, .st-d-close:active, #fm-nom-bar a:active, .fm-agree:active {
+    transition-duration: 0.04s;
+  }
+  /* 色・影・矢印の変化はなめらかに（マウスを乗せたとき・離したとき） */
+  .booking-button, .side-submit, .login-button, .fm-agree, .language-button, .language-menu button, .nav-item, .mobile-item,
+  .slot-open, .staff-select-trigger, .staff-picker-item, .calendar-toolbar button, .st-more, .st-photo, .back-to-calendar {
+    transition: transform 0.12s ease, filter 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease,
+      border-color 0.18s ease, color 0.18s ease;
+  }
+  .menu-row { transition: transform 0.12s ease, filter 0.12s ease, background-color 0.2s ease, box-shadow 0.2s ease; }
+  .menu-row > i { transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), color 0.2s ease; }
+  .booking-form input, .booking-form select, .booking-form textarea, .select-label select {
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  }
+}
+
+/* マウスを乗せたとき（マウス・トラックパッドの端末だけ。スマホで押したあとに色が残らないように） */
+@media (hover: hover) and (pointer: fine) {
+  .booking-button:not(:disabled):hover, .side-submit:hover, .login-button:hover, .fm-agree:not(:disabled):hover {
+    filter: brightness(1.07);
+    box-shadow: 0 3px 10px rgb(148 99 40 / 0.28);
+  }
+  .language-button:hover { background: #f9fafb; border-color: #b9bec6; }
+  .nav-item:not(.active):hover, .mobile-item:not(.active):hover { color: var(--primary); }
+  /* メニューの行：行全体がうっすら色づき、右の矢印が少し右へ動く */
+  .menu-row:hover { background: #faf6f0; box-shadow: 0 0 0 6px #faf6f0; border-radius: 4px; }
+  .menu-row:hover > i { transform: translateX(3px); color: var(--primary); }
+  .staff-select-trigger:hover { box-shadow: 0 0 0 1px #c9a77a inset; }
+  .calendar-toolbar button:not(:disabled):hover { filter: brightness(0.95); }
+  .back-to-calendar:hover { color: #6f4a1e; }
+  .st-more:hover { filter: brightness(0.92); }
+}

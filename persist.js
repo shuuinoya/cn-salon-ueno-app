@@ -7,7 +7,8 @@
 //   直前の完全なファイルが必ず残る）。置換前の版は .bak として1世代保持（誤操作からの復旧用）
 // ・読み込みで壊れたファイルを検出したら、.broken-<日時> に退避して初期データで起動
 //   （システム全体を停止させない）。.bak が読めればそちらを使う
-// ・保存は3秒ごとに内容が変わったときだけ（差分なしならディスクに触れない）
+// ・保存は変更の操作の直後（60msまとめて）＋1秒ごとの見回りで、内容が変わったときだけ（差分なしならディスクに触れない）
+// ・一時ファイルはディスクへ書き終わる（fsync）のを待ってから差し替える（パソコンを閉じる・電源断でも消えない）
 // ・Map / Set はタグ付きJSONで可逆に保存する
 // ・ファイルは所有者のみ読み書き可（0600。顧客情報を含むため）
 "use strict";
@@ -170,6 +171,10 @@ async function loadSnapshotWithRemote() {
 let savesAborted = false;
 function abortSaves() { savesAborted = true; }
 
+// 変更の直後に保存する（startSaver が始まるまでは何もしない）
+let saveSoon = () => {};
+function requestSave() { saveSoon(); }
+
 // 定期保存を開始する。getSnapshot() が返すオブジェクトを丸ごと保存する。
 function startSaver(getSnapshot) {
   if (!persistenceEnabled()) return () => {};
@@ -195,10 +200,15 @@ function startSaver(getSnapshot) {
     if (json === lastWritten) { lastBody = body; return; }
     try {
       const tmp = file + ".tmp";
-      fs.writeFileSync(tmp, json, { mode: 0o600 });
+      // 一時ファイルに書いたら、ディスクへ書き終わるのを待ってから（fsync）差し替える。
+      // 書き込みの途中でパソコンを閉じる・電源が落ちる・強制終了しても、直前の完全なファイルが必ず残る
+      const fd = fs.openSync(tmp, "w", 0o600);
+      try { fs.writeSync(fd, json); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
       try { if (fs.existsSync(file)) fs.copyFileSync(file, file + ".bak"); } catch {}
       fs.renameSync(tmp, file); // 原子的置換
       try { fs.chmodSync(file, 0o600); } catch {}
+      // 差し替え（ファイル名の付け替え）自体もディスクに確定させる
+      try { const dfd = fs.openSync(path.dirname(file), "r"); try { fs.fsyncSync(dfd); } finally { fs.closeSync(dfd); } } catch {}
       lastWritten = json;
       lastBody = body;
     } catch (e) {
@@ -231,7 +241,15 @@ function startSaver(getSnapshot) {
     ghTimer.unref?.();
   }
 
-  const timer = setInterval(saveNow, 3000);
+  // 変更の直後に呼ばれる即時保存（demo-api.js が、予約・スタッフ情報・設定などを変える操作のたびに呼ぶ）。
+  // 続けて何度も変えたときは 60ms まとめてから1回だけ書く
+  let soonTimer = null;
+  saveSoon = () => {
+    if (soonTimer) return;
+    soonTimer = setTimeout(() => { soonTimer = null; saveNow(); }, 60);
+  };
+  // 念のための見回り（メール送信の記録など、操作以外で変わった分も1秒以内に保存する。変化がなければディスクに触れない）
+  const timer = setInterval(saveNow, 1000);
   timer.unref?.(); // 保存タイマーだけでプロセスを生かし続けない
   // 正常終了・停止シグナル時は即時保存してから終わる
   process.on("exit", saveNow);
@@ -253,6 +271,6 @@ function startSaver(getSnapshot) {
 }
 
 module.exports = {
-  persistenceEnabled, loadSnapshot, loadSnapshotWithRemote, startSaver,
+  persistenceEnabled, loadSnapshot, loadSnapshotWithRemote, startSaver, requestSave,
   dataFile, abortSaves, isCloud, remoteEnabled: GH.enabled,
 };

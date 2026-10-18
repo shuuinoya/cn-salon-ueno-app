@@ -405,7 +405,8 @@
   }
   // 予約サイトの画面部品（React）がサーバーのHTMLを引き継ぐ（ハイドレーション）前にページを書き換えると、
   // Reactが「内容が違う」とエラー（#418）を出して画面を描き直してしまう。引き継ぎが終わってから書き換える
-  const isReactPage = !!document.querySelector('script[src*="/_next/static/chunks/"]');
+  // （画面の部品は /_next/static/v-<版>/chunks/… の版つきの場所からも読み込まれる）
+  const isReactPage = !!document.querySelector('script[src*="/_next/static/"]');
   const hydrated = () => {
     if (!isReactPage) return true;
     const el = document.querySelector(".site-header") || document.querySelector(".page-shell");

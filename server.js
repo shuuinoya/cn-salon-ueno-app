@@ -5,7 +5,8 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 
-const { handleDemoApi, isAdminSession, clearSession, ready: demoReady, nominationOf } = require("./demo-api");
+const { handleDemoApi, isAdminSession, clearSession, ready: demoReady, nominationOf, liveSeq, courseNameOf } = require("./demo-api");
+const { EventEmitter } = require("events");
 
 const ROOT = __dirname;
 const PUBLIC = path.join(ROOT, "public");
@@ -41,7 +42,234 @@ function brandFor(file, url) {
 function fileVer(name) {
   try { return String(Math.floor(fs.statSync(path.join(__dirname, "public", name)).mtimeMs)); } catch { return "1"; }
 }
-const PM_VER = fileVer("pm-layout.js") + "-" + fileVer("pm-layout.css");
+// 管理画面の上書きスクリプト・CSSの版番号（ファイルを書き換えたら、サーバーを再起動しなくてもすぐ変わる）
+const pmVer = () => fileVer("pm-layout.js") + "-" + fileVer("pm-layout.css");
+
+// 画面の部品（/_next/static の JS・CSS）の版番号。部品のどれか1つでも書き換えると変わる。
+// ページには /_next/static/v-<版>/chunks/… の形で載せ、ブラウザは同じ版の部品をサーバーに確認せず1年使い回す
+// （これまでは画面を開くたびに約20個の部品について「変わっていないか」の確認の往復があった）。
+// 部品どうしの読み込み（./xxx.js）も同じ版のフォルダから読まれるので、新旧の部品が混ざらない
+const STATIC_DIRS = ["chunks", "css"].map((d) => path.join(PUBLIC, "_next", "static", d));
+let staticVerCache = { at: 0, v: "" };
+let selfSig = "";
+function staticVer() {
+  const now = Date.now();
+  if (staticVerCache.v && now - staticVerCache.at < 2000) return staticVerCache.v;
+  // 配信時の書き換え（サイト名・写真の配信元・公開URL）も中身を変えるので、版に含める
+  if (!selfSig) {
+    try { selfSig = require("crypto").createHash("sha1").update(fs.readFileSync(__filename)).digest("hex"); } catch { selfSig = String(Date.now()); }
+    selfSig += "|" + IMAGE_CDN + "|" + (PUBLIC_HOSTS[0] || "");
+  }
+  const h = require("crypto").createHash("sha1").update(selfSig);
+  for (const d of STATIC_DIRS) {
+    let names = [];
+    try { names = fs.readdirSync(d).sort(); } catch {}
+    for (const n of names) {
+      try { const st = fs.statSync(path.join(d, n)); h.update(n + ":" + st.size + ":" + Math.floor(st.mtimeMs) + ";"); } catch {}
+    }
+  }
+  staticVerCache = { at: now, v: h.digest("hex").slice(0, 10) };
+  return staticVerCache.v;
+}
+// HTML・RSC・JSの中の部品の場所（/_next/static/chunks/… と _next/static/css/…）を、版つきの場所に置き換える
+const STATIC_REF = /(^|[^A-Za-z0-9_.\-/])(\/?)_next\/static\/(chunks|css)\//g;
+function pinStatic(text) {
+  const v = staticVer();
+  return text.replace(STATIC_REF, (m, pre, slash, dir) => pre + slash + "_next/static/v-" + v + "/" + dir + "/");
+}
+// <script> の中に入れるJSON（< > & と、JSでは改行扱いになる2文字を \u 表記にする）
+const LS = String.fromCharCode(0x2028), PS = String.fromCharCode(0x2029);
+function scriptJson(v) {
+  return JSON.stringify(v).replace(/[<>&]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"))
+    .split(LS).join("\\u2028").split(PS).join("\\u2029");
+}
+
+// ---- ページと一緒に返すデータ（先読みデータ） ----
+// ページが開いた直後に必ず取りに来るデータ（空き状況・会員情報・予約台帳など）を、サーバーの中で
+// ブラウザから頼まれたときと同じ処理（同じログイン状態）で作ってページに入れておく。
+// ブラウザ（cn-fast.js）は最初の1回だけそれを使い、取りに行く往復を省く。2回目からは普通に取りに来る
+function apiPeek(req, p) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v) => { if (!done) { done = true; resolve(v); } };
+    const r = new EventEmitter();
+    const headers = { ...req.headers, accept: "application/json" };
+    for (const k of ["if-none-match", "if-modified-since", "range", "content-length", "content-type"]) delete headers[k];
+    Object.assign(r, { method: "GET", url: p, headers, clientIp: req.clientIp, fromInternet: req.fromInternet,
+      socket: req.socket, connection: req.socket, httpVersion: req.httpVersion });
+    const out = new EventEmitter();
+    const hdr = {};
+    const chunks = [];
+    let code = 200;
+    Object.defineProperty(out, "statusCode", { get: () => code, set: (v) => { code = v; } });
+    Object.assign(out, {
+      headersSent: false,
+      setHeader(k, v) { hdr[String(k).toLowerCase()] = v; return out; },
+      getHeader(k) { return hdr[String(k).toLowerCase()]; },
+      hasHeader(k) { return String(k).toLowerCase() in hdr; },
+      removeHeader(k) { delete hdr[String(k).toLowerCase()]; },
+      writeHead(s, a, b) {
+        code = s;
+        const h = a && typeof a === "object" ? a : b && typeof b === "object" ? b : null;
+        if (h) for (const [k, v] of Object.entries(h)) hdr[k.toLowerCase()] = v;
+        out.headersSent = true;
+        return out;
+      },
+      write(c) { if (c != null && typeof c !== "function") chunks.push(Buffer.from(c)); return true; },
+      end(c) {
+        if (c != null && typeof c !== "function") chunks.push(Buffer.from(c));
+        const t = String(hdr["content-type"] || "");
+        // ログイン状態の更新（Set-Cookie）を伴う返事・JSON以外・成功以外は入れない（ブラウザが普通に取りに来る）
+        const body = Buffer.concat(chunks);
+        finish(code === 200 && !hdr["set-cookie"] && /json/.test(t) && body.length < 200000 ? { s: 200, t, b: body.toString("utf8") } : null);
+        out.emit("finish");
+        return out;
+      },
+      flushHeaders() {}, writeContinue() {},
+    });
+    try {
+      if (!handleDemoApi(r, out, new URL(p, "http://localhost"))) finish(null);
+    } catch { finish(null); }
+    setTimeout(() => finish(null), 400);
+  });
+}
+const jstDay = (ms) => new Date(ms + 9 * 3600e3).toISOString().slice(0, 10);
+const addDays = (d, n) => new Date(Date.parse(d + "T00:00:00Z") + n * 86400e3).toISOString().slice(0, 10);
+const isDay = (d) => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d) && Number.isFinite(Date.parse(d)) && new Date(d).toISOString().slice(0, 10) === d;
+// ページごとの「開いた直後に必ず取りに来るデータ」の一覧（ブラウザ側と同じ規則でURLを作る。違っていても普通に取りに来るだけ）
+function bootPaths(req, url) {
+  const p = url.pathname, q = url.searchParams;
+  const today = jstDay(Date.now() - 3 * 3600e3); // 日付は日本時間の朝3時に切り替わる（画面と同じ）
+  if (p === "/admin") {
+    if (!isAdminSession(req)) return [];
+    const first = today.slice(0, 8) + "01";
+    const from = addDays(first, -new Date(first + "T00:00:00Z").getUTCDay());
+    return [`/api/demo/schedule?date=${today}`, `/api/demo/locks?date=${today}`, "/api/demo/settings",
+      `/api/demo/calendar?from=${from}&days=42`, "/api/demo/build", "/api/demo/alerts", "/api/demo/whoami",
+      "/api/demo/courses", "/api/demo/recent-bookings"];
+  }
+  if (p.startsWith("/admin") || p.startsWith("/api/") || p === "/demo/admin") return [];
+  const list = ["/api/member/me"];
+  if (p.startsWith("/book") || p.startsWith("/menus")) list.push("/api/demo/settings");
+  if (p === "/book/select-datetime") {
+    const course = q.get("courses") ?? q.get("course");
+    if (course) {
+      const dq = q.get("date");
+      const date = isDay(dq) && dq >= today && dq <= addDays(today, 84) ? dq : today;
+      const people = ["1", "2", "3"].includes(q.get("people") ?? "") ? q.get("people") : "1";
+      const pref = ["male", "female"].includes(q.get("staff") ?? "") ? q.get("staff") : "none";
+      const nm = courseNameOf(course);
+      const g = nm.includes("女性") ? "female" : nm.includes("男性") ? "male" : "none";
+      const sp = new URLSearchParams({ course, date, people, staff: g === "none" ? pref : g });
+      const sid = q.get("staffId") ?? "";
+      if (/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(sid)) sp.set("staffId", sid);
+      list.push("/api/availability?" + sp);
+    }
+  }
+  if (p === "/book/confirm") list.push("/api/member/me?lite=1");
+  if (p === "/staff") list.push("/api/staff/list");
+  return list;
+}
+async function pageBoot(req, url) {
+  const paths = bootPaths(req, url);
+  if (!paths.length) return null;
+  const seq = liveSeq();
+  const got = await Promise.all(paths.map((p) => apiPeek(req, p).catch(() => null)));
+  const d = {};
+  paths.forEach((p, i) => { if (got[i]) d[p] = got[i]; });
+  return Object.keys(d).length ? { seq: String(seq), d } : null;
+}
+
+// ページの先頭に入れる仕組み（public/cn-fast.js。書き換えたらすぐ反映）
+let fastSrc = { m: -1, s: "" };
+function fastScript() {
+  const f = path.join(PUBLIC, "cn-fast.js");
+  let m = 0;
+  try { m = fs.statSync(f).mtimeMs; } catch {}
+  if (m !== fastSrc.m) {
+    let s = "";
+    try { s = fs.readFileSync(f, "utf8").replace(/^\s*\/\/.*$/gm, "").replace(/\n\s*\n+/g, "\n"); } catch {}
+    fastSrc = { m, s };
+  }
+  return fastSrc.s;
+}
+// 予約サイト：リンクを押し始めた瞬間（指が触れた・マウスを押した）に、次のページを先に取りに行く（Chrome系。離す前に届き始める）
+const SPECULATION = '<script type="speculationrules">{"prefetch":[{"where":{"and":[{"href_matches":"/*"},' +
+  '{"not":{"href_matches":"/admin*"}},{"not":{"href_matches":"/api/*"}},{"not":{"href_matches":"/cnsalon-board*"}}]},' +
+  '"eagerness":"conservative"}]}</script>';
+function fastHead(boot, url) {
+  let h = "";
+  if (boot) h += "<script>window.__cnBoot=" + scriptJson(boot) + ";</script>";
+  // 管理画面のログイン画面：ID・パスワードを入れている間に、予約台帳の部品を先に読み込んでおく（ログイン後すぐ台帳が出る）。
+  // 一覧は cn-fast.js より前に置く（cn-fast.js が読み込みを始めるときに使う）
+  if (url.pathname === "/admin/login") {
+    const list = adminWarmList();
+    if (list.length) h += "<script>window.__cnWarm=" + scriptJson(list) + ";</script>";
+  }
+  const s = fastScript();
+  if (s) h += "<script>" + s + "</script>";
+  if (brandFor(null, url) === BOOKING_BRAND && !url.pathname.startsWith("/admin")) h += SPECULATION;
+  return h;
+}
+
+// このページが使う部品（入口の部品の一覧に書かれている、画面ごとの部品とその部品が使う部品）を先読みの指定にする。
+// これまでは入口の部品を読み終わってから画面ごとの部品に気づいて読み始めていた（初めて開くときに1往復ぶん待っていた）
+const entryTables = new Map(); // 入口の部品ファイル → { m, table: {id: [部品…]} }
+function entryTable(entryName) {
+  const f = path.join(PUBLIC, "_next", "static", "chunks", entryName);
+  let m = 0;
+  try { m = fs.statSync(f).mtimeMs; } catch { return null; }
+  const c = entryTables.get(entryName);
+  if (c && c.m === m) return c.table;
+  let table = {};
+  try {
+    const s = fs.readFileSync(f, "utf8");
+    const mf = /m\.f=\[([^\]]*)\]/.exec(s);
+    const deps = mf ? [...mf[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]) : [];
+    const re = /"?([0-9a-f]{12})"?:async\(\)=>[{(]?(?:let e=)?await M\(\(\)=>import\(`\.\/([^`]+)`\)(?:\.then\([^)]*\))?,__vite__mapDeps\(\[([\d,]*)\]\)/g;
+    for (const x of s.matchAll(re)) {
+      const list = x[3].split(",").filter(Boolean).map((i) => deps[Number(i)]).filter(Boolean);
+      table[x[1]] = ["_next/static/chunks/" + x[2], ...list];
+    }
+  } catch { table = {}; }
+  entryTables.set(entryName, { m, table });
+  return table;
+}
+function preloadsFor(text) {
+  const em = /src="\/_next\/static\/chunks\/(index-[^"]+\.js)"/.exec(text);
+  if (!em) return [];
+  const table = entryTable(em[1]) || {};
+  const want = new Set();
+  for (const x of text.matchAll(/I\[\\"([0-9a-f]{12})\\"/g)) for (const d of table[x[1]] || []) want.add(d);
+  return [...want].filter((d) => !text.includes('"/' + d + '"'));
+}
+function addModulePreloads(text) {
+  const add = preloadsFor(text);
+  if (!add.length) return text;
+  const tags = add.map((d) => d.endsWith(".css") ? `<link rel="preload" as="style" href="/${d}"/>` : `<link rel="modulepreload" href="/${d}" crossorigin=""/>`).join("");
+  return text.replace("</head>", () => tags + "</head>");
+}
+// 予約台帳（/admin）で使う部品の一覧（版つきの場所）。ログイン画面で先に読み込んでおくため
+let adminWarm = { m: -1, list: [] };
+function adminWarmList() {
+  const r = routes["/admin"];
+  if (!r || !r.file) return [];
+  const f = path.join(ROOT, r.file);
+  let m = 0;
+  try { m = fs.statSync(f).mtimeMs; } catch { return []; }
+  const key = m + ":" + staticVer() + ":" + pmVer();
+  if (adminWarm.m === key) return adminWarm.list;
+  let list = [];
+  try {
+    const html = fs.readFileSync(f, "utf8");
+    const refs = new Set([...html.matchAll(/"\/(_next\/static\/(?:chunks|css)\/[^"]+)"/g)].map((x) => x[1]));
+    for (const d of preloadsFor(html)) refs.add(d);
+    list = [...refs].map((d) => pinStatic("/" + d));
+    list.push("/pm-layout.js?v=" + pmVer(), "/pm-layout.css?v=" + pmVer(), "/pm-motion.css?v=" + fileVer("pm-motion.css"));
+  } catch { list = []; }
+  adminWarm = { m: key, list };
+  return list;
+}
 
 const ENTRY_URLS = {
   "/cn-ueno-health-and-beauty": "/",
@@ -84,10 +312,15 @@ function fixDateHeaders(text, url) {
 }
 
 function sendFile(res, file, status, type, head, url, req) {
-  fs.readFile(file, (err, data) => {
+  fs.readFile(file, async (err, data) => {
     if (err) return send404(res, head);
     let body = data;
     const isHtml = type.startsWith("text/html");
+    // ページが開いた直後に必ず取りに来るデータを、ページと一緒に返すために先に用意する（失敗しても普通に表示する）
+    let boot = null;
+    if (isHtml && url && req && status === 200 && !head) {
+      try { boot = await pageBoot(req, url); } catch { boot = null; }
+    }
     // 静的ファイル（HTML以外）はキャッシュを効かせる：
     // ・Last-Modified＋304で、変わっていないファイルは再ダウンロードさせない
     // ・ハッシュつき（/assets/・/_next/）や ?v= つきは1日、その他は1時間の再利用を許可
@@ -104,7 +337,14 @@ function sendFile(res, file, status, type, head, url, req) {
         const long = versioned || (/\/(assets|_next)\//.test(file) && !code);
         // メニューの小さい写真（public/thumbs）は、元の写真の中身の印がファイル名に入っているので、30日使い回してよい
         const thumb = /[\\/]public[\\/]thumbs[\\/]/.test(file);
-        const cache = { "Cache-Control": thumb ? "public, max-age=2592000, immutable" : long ? "public, max-age=86400" : code ? "no-cache" : "public, max-age=3600", "Last-Modified": new Date(mtime).toUTCString() };
+        // 版つきの場所で頼まれた画面の部品：版が今のものなら、確認なしで1年使い回させる（書き換えると版＝場所が変わる）。
+        // 古い版の場所で頼まれたとき（書き換えの直前に開いたページ）は、今の中身を返して保存はさせない
+        const pin = req && req.pinStatic;
+        // ?v= に今のファイルの更新時刻が入っているもの（会員ログイン・翻訳辞書・管理画面の上書きなど）も同じく1年
+        const verOk = versioned && String(url.searchParams.get("v")).includes(String(Math.floor(fs.statSync(file).mtimeMs)));
+        const cc = pin === "current" || verOk ? "public, max-age=31536000, immutable" : pin === "stale" ? "no-store"
+          : thumb ? "public, max-age=2592000, immutable" : long ? "public, max-age=86400" : code ? "no-cache" : "public, max-age=3600";
+        const cache = { "Cache-Control": cc, "Last-Modified": new Date(mtime).toUTCString() };
         if (ims && ims >= mtime) {
           res.writeHead(304, cache);
           return res.end();
@@ -146,7 +386,10 @@ function sendFile(res, file, status, type, head, url, req) {
         // （管理画面には入れない。?v=更新時刻 を付けて、ブラウザに古いキャッシュを使わせない）
         if (brandFor(file, url) === BOOKING_BRAND && !file.includes("pm-login") && !file.includes("admin")) {
           // 多言語の共通辞書（あとから追加した部分を8か国語で表示する）。ほかのスクリプトより先に読み込む
-          text = text.replace("</head>", '<script src="/cn-i18n.js?v=' + fileVer("cn-i18n.js") + '"></script></head>');
+          // 予約サイト本体のページでは、辞書（約45KB）の読み込みで画面の表示を待たせない（defer：あとから使う会員ログインなどより先には必ず読み込まれる）。
+          // スタッフ紹介・マイページはページの中のスクリプトがすぐ辞書を使うので、そのまま
+          const i18nDefer = /pm-(staff|mypage)\.html$/.test(file) ? "" : " defer";
+          text = text.replace("</head>", '<script src="/cn-i18n.js?v=' + fileVer("cn-i18n.js") + '"' + i18nDefer + '></script></head>');
           text = text.replace("</body>", '<script src="/member.js?v=' + fileVer("member.js") + '" defer></script></body>');
           // 予約サイトのレイアウト補正（タブレット幅で本文の列を中央に置く）
           text = text.replace("</head>", '<link rel="stylesheet" href="/booking-layout.css?v=' + fileVer("booking-layout.css") + '"/></head>');
@@ -185,10 +428,15 @@ function sendFile(res, file, status, type, head, url, req) {
           text = text.replace("</head>", '<link rel="stylesheet" href="/pm-motion.css?v=' + fileVer("pm-motion.css") + '"/></head>');
         }
         // 管理画面の上書きスクリプト・CSSにも版番号を付け、古いキャッシュが残らないようにする
+        const PM_VER = pmVer();
         text = text
           .split('href="/pm-layout.css"').join('href="/pm-layout.css?v=' + PM_VER + '"')
           .split('src="/pm-layout.js"').join('src="/pm-layout.js?v=' + PM_VER + '"');
+        // このページが使う部品の先読みの指定（初めて開くとき、部品の読み込みが順番待ちにならない）
+        text = addModulePreloads(text);
       }
+      // 画面の部品の場所を版つきにする（HTML・RSC・部品どうしの読み込み一覧）
+      if (isHtml || /[\\/]_next[\\/]static[\\/]chunks[\\/]/.test(file)) text = pinStatic(text);
       // サイト名の付け替え（HTML本文・RSCペイロード・JSチャンクをまとめて揃える）
       if (text.includes(OLD_BRAND)) text = text.split(OLD_BRAND).join(brandFor(file, url));
       // 写真は無料・容量無制限の配信サービス（jsDelivr：公開GitHubリポジトリのファイルを配る）から出し、
@@ -197,9 +445,14 @@ function sendFile(res, file, status, type, head, url, req) {
       if (IMAGE_CDN) text = text.split('"/images/').join('"' + IMAGE_CDN + "/images/").split("`/images/").join("`" + IMAGE_CDN + "/images/");
       // 店舗情報の「ホームページ」は、今このサイトを公開している住所を表示する（Render以外で動かしているときも正しく）
       if (PUBLIC_HOSTS[0] && PUBLIC_HOSTS[0] !== "cn-salon-ueno.onrender.com") text = text.split("https://cn-salon-ueno.onrender.com").join("https://" + PUBLIC_HOSTS[0]);
+      // 画面の速さ：ページの先頭に小さな仕組み（cn-fast.js）と、ページが開いた直後に必ず取りに来るデータを入れる
+      // （データを取りに行く往復を省く・使わない先読みをやめる・ページ移動の裏側の余分な通信をなくす）。
+      // データはブラウザが取りに来たときと同じ中身にするため、上の書き換え（サイト名など）のあとで入れる
+      if (isHtml && url) text = text.replace(/<head>/, () => "<head>" + fastHead(boot, url));
       body = Buffer.from(text);
     }
-    if (!res.getHeader("Cache-Control")) res.setHeader("Cache-Control", "no-cache");
+    // ページ（HTML）には本人の会員情報・管理画面のデータが入ることがあるので、共有のキャッシュには置かせない
+    if (!res.getHeader("Cache-Control")) res.setHeader("Cache-Control", isHtml ? "private, no-cache" : "no-cache");
     res.setHeader("Content-Type", type);
     res.writeHead(status);
     res.end(head ? undefined : body);
@@ -588,8 +841,15 @@ const handler = (req, res) => {
     if (er && er.file) {
       const eu = new URL(url);
       eu.pathname = entry; // ページ内部のルーターには本来のパスを渡す
-      return sendFile(res, path.join(ROOT, er.file), er.status, er.contentType, head, eu);
+      return sendFile(res, path.join(ROOT, er.file), er.status, er.contentType, head, eu, req);
     }
+  }
+
+  // 版つきの場所の画面の部品（/_next/static/v-<版>/chunks/…）は、本来の場所のファイルを返す
+  const pinM = /^\/_next\/static\/v-([a-f0-9]{6,20})\/((?:chunks|css)\/[^/]+)$/.exec(pathname);
+  if (pinM) {
+    req.pinStatic = pinM[1] === staticVer() ? "current" : "stale";
+    pathname = "/_next/static/" + pinM[2];
   }
 
   const file = path.normalize(path.join(PUBLIC, pathname));
@@ -616,7 +876,7 @@ const handler = (req, res) => {
     }
     return send404(res, head);
   }
-  sendFile(res, path.join(ROOT, r.file), r.status, r.contentType, head, url);
+  sendFile(res, path.join(ROOT, r.file), r.status, r.contentType, head, url, req);
 };
 const server = http.createServer(handler);
 
