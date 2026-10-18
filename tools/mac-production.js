@@ -6,7 +6,9 @@
 // ・サーバーが止まったら同じURLのまま自動で起動し直す。トンネルが切れたらつなぎ直す（URLは変わる）
 // ・tools/mac-production.env に PUBLIC_URL（Tailscale Funnel の固定URL https://〜.ts.net）があれば、
 //   Cloudflare の代わりに Tailscale で公開する（URLが変わらない・リアルタイム通知も使える）
-// 使い方：「このMacで本番を動かす.command」をダブルクリック（止めるときはその画面で Ctrl+C）
+// 使い方：「このMacで本番を動かす.command」をダブルクリック。Macの裏側（launchd：jp.cnsalon.production）で動かすので、
+//   その画面を閉じても止まらない・止まっても自動で起動し直す・Macにログインすると自動で始まる。
+//   止めるときは「このMacの本番を止める.command」（Render に戻す前は必ず止める）。記録は ~/Library/Logs/cn-salon/production.log
 // 必要：tools/mac-production.env に GH_TOKEN と GH_REPO（Render の Environment と同じ値）
 "use strict";
 const { spawn } = require("child_process");
@@ -20,6 +22,7 @@ const ENV_FILE = path.join(__dirname, "mac-production.env");
 const CF = path.join(__dirname, "bin", "cloudflared");
 const PORT = process.env.MAC_PROD_PORT || "5600";
 const URL_FILE = path.join(ROOT, "data", "mac-production-url.txt");
+const BACKGROUND = process.env.CN_LAUNCHD === "1"; // Macの裏側（launchd）で動いているか
 
 function readEnvFile() {
   const env = {};
@@ -63,8 +66,14 @@ function announce() {
   console.log(" このMacで本番を動かしています（無料）");
   console.log(` 予約サイト（お客様）: ${publicUrl}`);
   console.log(` 管理画面　　　　　　: ${publicUrl}/cnsalon-board`);
-  console.log(" ・この画面とMacは開いたまま（ふたを閉じない・電源につなぐ）にしてください");
-  console.log(" ・止めるときは、この画面で Ctrl+C");
+  if (BACKGROUND) {
+    console.log(" ・Macの裏側で動いています（ターミナルの画面を閉じても止まりません）");
+    console.log(" ・Macは電源につなぎ、ふたを閉じないでください");
+    console.log(" ・止めるときは「このMacの本番を止める.command」をダブルクリック");
+  } else {
+    console.log(" ・この画面とMacは開いたまま（ふたを閉じない・電源につなぐ）にしてください");
+    console.log(" ・止めるときは、この画面で Ctrl+C");
+  }
   console.log(fileEnv.PUBLIC_URL ? " ・URLは固定です（Tailscale）。起動し直しても変わりません" : " ・URLは起動するたびに変わります（data/mac-production-url.txt にも保存）");
   console.log("==============================================\n");
 }
@@ -149,9 +158,10 @@ function startServer(show) {
     const now = Date.now();
     restarts.push(now);
     while (restarts.length && now - restarts[0] > 5 * 60000) restarts.shift();
-    if (restarts.length > 5) { console.log("（停止）サーバーが繰り返し止まるため、自動での起動をやめました。画面の表示を確認してください"); stopAll(1); return; }
-    console.log("（注意）サーバーが止まりました。3秒後に同じURLのまま起動し直します");
-    setTimeout(() => { if (!stopping) startServer(false); }, 3000);
+    // 短い間に何度も止まるときは、間をあけて起動し直し続ける（あきらめない：見張り役が終わると誰も起動し直さないため）
+    const wait = restarts.length > 5 ? 60000 : 3000;
+    console.log(`（注意）サーバーが止まりました。${wait / 1000}秒後に同じURLのまま起動し直します`);
+    setTimeout(() => { if (!stopping) startServer(false); }, wait);
   });
   // 3) 動かしている間はスリープさせない
   try { caf && caf.kill(); } catch {}
@@ -196,13 +206,60 @@ function ensureFunnel(host) {
   });
 }
 
-if (fileEnv.PUBLIC_URL) {
-  // 固定URL（Tailscale Funnel）で公開
-  publicUrl = fileEnv.PUBLIC_URL.replace(/\/+$/, "");
-  tunnelAt = Date.now();
-  const host = publicUrl.replace(/^https:\/\//, "");
-  ensureFunnel(host).then(() => startServer(true));
-  tunnel = { kill() { ensureFunnel(host); } }; // 見張りが「つながらない」と判断したら公開設定をかけ直す（URLは変わらない）
-} else {
-  startTunnel();
+function begin() {
+  if (fileEnv.PUBLIC_URL) {
+    // 固定URL（Tailscale Funnel）で公開
+    publicUrl = fileEnv.PUBLIC_URL.replace(/\/+$/, "");
+    tunnelAt = Date.now();
+    const host = publicUrl.replace(/^https:\/\//, "");
+    ensureFunnel(host).then(() => startServer(true));
+    tunnel = { kill() { ensureFunnel(host); } }; // 見張りが「つながらない」と判断したら公開設定をかけ直す（URLは変わらない）
+  } else {
+    startTunnel();
+  }
 }
+
+// この見張り役（起動プログラム）に思わぬエラーが起きても、記録だけして見張りを続ける
+// （このMacでは、終わったあと裏側の仕組みがすぐには起動し直さないことがあるため、自分からは終わらない）
+process.on("uncaughtException", (e) => { console.log("（注意）起動プログラムでエラー（見張りは続けます）: " + (e && e.stack || e)); });
+process.on("unhandledRejection", (e) => { console.log("（注意）起動プログラムでエラー（見張りは続けます）: " + (e && e.stack || e)); });
+
+// すでにこのMacで本番が動いているとき（裏側とターミナルの二重起動など）は、データを守るため起動しない。
+// 裏側（launchd）では、終わると起動し直されるので、終わらずに待ち、空いたら引き継ぐ。
+// 前の見張り役が強制終了してサーバーだけが残っている場合（親がいない server.js）は、それを止めてから引き継ぐ
+const portBusy = () => new Promise((resolve) => {
+  const c = require("net").connect({ host: "127.0.0.1", port: Number(PORT) });
+  c.once("connect", () => { c.destroy(); resolve(true); });
+  c.once("error", () => resolve(false));
+});
+function orphanServerPid() {
+  try {
+    const { execFileSync } = require("child_process");
+    const pid = execFileSync("/usr/sbin/lsof", ["-nP", `-iTCP:${PORT}`, "-sTCP:LISTEN", "-t"]).toString().trim().split("\n")[0];
+    const info = execFileSync("/bin/ps", ["-o", "ppid=,command=", "-p", pid]).toString().trim();
+    return /^1\s+\S*node\s+server\.js\b/.test(info) ? Number(pid) : 0;
+  } catch { return 0; }
+}
+portBusy().then(async (busy) => {
+  if (!busy) return begin();
+  const orphan = orphanServerPid();
+  if (!orphan) {
+    console.log(`\nこのMacではすでに本番が動いています（${PORT}番）。二重には起動しません。`);
+    if (!BACKGROUND) process.exit(0);
+    console.log("（裏側）そちらが止まったら、この見張り役が引き継ぎます");
+    const wait = setInterval(async () => {
+      if (stopping || (await portBusy())) return;
+      clearInterval(wait);
+      begin();
+    }, 10000);
+    return;
+  }
+  console.log("前の本番のサーバーが見張りなしで残っていたため、止めてから引き継ぎます（最後の保存をしてから止まります）…");
+  try { process.kill(orphan, "SIGTERM"); } catch {}
+  for (let i = 0; ; i++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    if (stopping) return;
+    if (!(await portBusy())) return begin();
+    if (i === 30) { console.log("（注意）前のサーバーが止まらないため、強制的に止めます"); try { process.kill(orphan, "SIGKILL"); } catch {} }
+  }
+});

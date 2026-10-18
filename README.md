@@ -58,6 +58,15 @@
 元サイト https://cn-salon-ueno.cnsalon2021.chatgpt.site を、2026年9月24日時点のまま保存したものです。
 `pages/` と `public/` の中身は基本的に元サイトのままです。例外は、追加したページ（demo-admin.html・pm-login.html・not-found.html）と、予約確認・完了ページのラベル折り返しバグを直すために最小修正した3ファイル（BookingText-*.js・page-WafCof8Y.js・page-ChO0-Npx.js）です。
 
+## このMacで本番を動かす（Render が使えない間）
+- 「**このMacで本番を動かす.command**」をダブルクリック。本番は**Macの裏側（launchd：`jp.cnsalon.production`）**で動き、**ターミナルやVS Codeの画面を閉じても止まりません**。URLは固定（Tailscale：`tools/mac-production.env` の `PUBLIC_URL`）
+- サーバーが止まっても、見張り役（`tools/mac-production.js`）が3秒後に起動し直します（何度も止まるときは1分おきに起動し直し続ける。見張り役は自分からは終わらない）
+- 止めるときは「**このMacの本番を止める.command**」（**Render に戻す前は必ず止める**。止めるとログインしても自動では始まりません）
+- **Macを再起動したあと**は、ログイン時に自動で始まる設定ですが、このMacでは裏側の自動起動が後回しにされることがあるため、開けないときは「このMacで本番を動かす.command」をダブルクリック（確実に起動します。もう動いていれば何もしません）
+- Macは電源につなぎ、ふたを閉じないでください（動いている間はスリープしない設定）
+- 記録：`~/Library/Logs/cn-salon/production.log`（5MBを超えたら次の起動時に古い分を1つ残して新しくする）
+- サーバーの変更を反映するときは `server.js` の子プロセスだけを止める（見張り役が同じURLのまま起動し直す）。`tools/mac-production.env` を変えたときや見張り役を変えたときは `launchctl kickstart -k gui/$(id -u)/jp.cnsalon.production`
+
 ## 本番ホスティング（24時間・固定URL・Macの電源オフでも動く）
 このフォルダは**そのままクラウドへデプロイできる**構成になっています（Dockerfile・render.yaml・fly.toml同梱）。デプロイすると：
 - **固定URL**（例 `https://cn-salon-ueno.onrender.com`、独自ドメイン `cn-salon.com` も設定可）で、**お客様は24時間いつでも**予約サイトを開けます
