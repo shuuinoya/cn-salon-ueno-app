@@ -151,23 +151,26 @@
   .booking-button.st-book { width: 100%; min-width: 0; }
   .st-status { margin: 0; padding: 28px 16px; color: #6b7280; text-align: center; line-height: 1.8; }
   .st-status button { margin-left: 6px; padding: 5px 12px; border: 1px solid #d1d5db; border-radius: 4px; background: #fff; font: inherit; cursor: pointer; }
-  /* 「続きを読む」・写真を押したとき：その人の情報を画面の真ん中に出す（カードは伸ばさない）。
-     スマホに合わせた縦1列の小さめの画面（パソコンでも同じ形）：写真は中央、名前・指名料・紹介文・指名して予約する */
-  #st-detail { inset: 0; margin: auto; width: min(420px, calc(100% - 24px)); max-width: none; max-height: calc(100% - 24px); padding: 0; overflow: auto; overscroll-behavior: contain; color: var(--text); background: #fff; border: 0; border-radius: 12px; box-shadow: 0 20px 50px rgb(0 0 0 / 0.3); }
+  /* 「続きを読む」・写真を押したとき：その人の情報を画面の真ん中に小さめに出す（カードは伸ばさない）。
+     パソコン・スマホとも縦1列で「写真 → 名前・性別・指名料（中央揃え）→ 紹介文（左揃え）→ 指名して予約する」の順。
+     画面に収まる大きさにし、長いときは中をスクロールして一番下のボタンまで押せる。閉じるボタンは右上 */
+  #st-detail { inset: 0; margin: auto; width: min(400px, calc(100% - 24px)); max-width: none; max-height: calc(100% - 24px); padding: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; color: var(--text); background: #fff; border: 0; border-radius: 12px; box-shadow: 0 20px 50px rgb(0 0 0 / 0.3); }
   #st-detail::backdrop { background: rgb(17 24 39 / 0.62); }
   .st-d { display: flex; flex-direction: column; }
-  .st-d-close { position: sticky; top: 10px; z-index: 2; align-self: flex-end; display: grid; place-items: center; width: 34px; height: 34px; margin: 10px 10px -44px 0; padding: 0; color: #374151; font: inherit; font-size: 22px; line-height: 1; background: rgb(255 255 255 / 0.92); border: 1px solid var(--line); border-radius: 50%; cursor: pointer; }
+  .st-d-close { position: sticky; top: 10px; z-index: 2; align-self: flex-end; display: grid; place-items: center; width: 36px; height: 36px; margin: 10px 10px -46px 0; padding: 0; color: #374151; font: inherit; font-size: 22px; line-height: 1; background: #fff; border: 1px solid var(--line); border-radius: 50%; box-shadow: 0 1px 4px rgb(0 0 0 / 0.12); cursor: pointer; }
   .st-d-close:focus-visible { outline: 2px solid #946328; outline-offset: 2px; }
-  .st-d-photo { position: relative; flex: none; width: min(200px, 56%); aspect-ratio: 3 / 4; margin: 24px auto 0; background: #f6efe4; border-radius: 10px; overflow: hidden; }
+  .st-d-photo { position: relative; flex: none; width: min(170px, 48%); aspect-ratio: 3 / 4; margin: 28px auto 0; background: #f6efe4; border-radius: 10px; overflow: hidden; }
   .st-d-photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
   .st-d-photo svg { position: absolute; inset: 0; margin: auto; width: 46%; height: 46%; fill: #dcc69f; }
-  .st-d-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 14px 20px 0; }
+  .st-d-body { display: flex; flex-direction: column; min-width: 0; padding: 16px 20px 20px; }
   .st-d .st-head { justify-content: center; text-align: center; }
   .st-d-name { margin: 0; color: var(--text); font-size: 18px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
-  .st-d .st-fee { text-align: center; font-size: 13px; }
+  .st-d .st-gender { font-size: 12px; }
+  .st-d .st-fee { margin-top: 4px; text-align: center; font-size: 13px; }
   .st-d .st-fee b { font-size: 15px; }
-  .st-d-msg { margin: 8px 0 0; color: #4b5563; font-size: 13px; line-height: 1.75; white-space: pre-line; overflow-wrap: anywhere; }
-  .st-d-actions { position: sticky; bottom: 0; margin: 12px -20px 0; padding: 12px 20px 14px; background: #fff; border-top: 1px solid var(--line); }
+  .st-d-msg { margin: 16px 0 0; padding-top: 14px; color: #4b5563; font-size: 13px; line-height: 1.8; text-align: left; white-space: pre-line; overflow-wrap: anywhere; border-top: 1px solid var(--line); }
+  .st-d-actions { margin-top: 20px; }
+  .st-d-actions .booking-button.st-book { width: 100%; min-width: 0; min-height: 48px; padding: 10px 16px; font-size: 16px; }
   @media (max-width: 767px) {
     .st-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 10px; }
     .st-body { padding: 10px 10px 12px; }
@@ -253,6 +256,7 @@
     document.documentElement.style.overflow = "";
     curId = null;
     if (pushed) { pushed = false; history.back(); }
+    setTimeout(reloadIfNew, 300);
   });
   // 「×」・まわりの暗いところで閉じる（Escキーでも閉じる）
   dlg.addEventListener("click", (e) => { if (e.target === dlg || e.target.closest(".st-d-close")) dlg.close(); });
@@ -285,11 +289,17 @@
 
   // quiet＝開いたままのページの更新（中身が変わったときだけ描き直す。失敗しても今の表示のまま）
   let lastJson = "";
+  // このページの版。書き換えられたら（詳細の画面を閉じているときに）新しい版へ読み込み直す
+  let pageVer = null, newPage = false;
+  const reloadIfNew = () => { if (newPage && !dlg.open && !document.hidden) location.reload(); };
   async function load(quiet) {
     try {
       const r = await fetch("/api/staff/list", { cache: "no-store" });
       if (!r.ok) throw new Error("http " + r.status);
-      const list2 = (await r.json()).staff || [];
+      const j = await r.json();
+      if (j.page) { if (pageVer === null) pageVer = j.page; else if (j.page !== pageVer) newPage = true; }
+      if (newPage) return reloadIfNew();
+      const list2 = j.staff || [];
       const txt = JSON.stringify(list2);
       if (quiet && txt === lastJson) return;
       lastJson = txt;

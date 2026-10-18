@@ -3419,8 +3419,11 @@ function handleDemoApi(req, res, url) {
           courses: courses.filter((c) => staffCanDo(st, c.id) && [st.gender, "none"].includes(courseGender(c.id))).map((c) => c.id),
         };
       });
+    // ページ（pm-staff.html）の版：書き換えたら、開いたままのスタッフ紹介ページが新しい版に読み込み直す
+    let page = 0;
+    try { page = Math.floor(fs.statSync(path.join(__dirname, "pages", "pm-staff.html")).mtimeMs); } catch {}
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
-    res.end(req.method === "HEAD" ? undefined : JSON.stringify({ staff }));
+    res.end(req.method === "HEAD" ? undefined : JSON.stringify({ staff, page }));
     return true;
   }
   if (url.pathname === "/api/staff/photo") {
