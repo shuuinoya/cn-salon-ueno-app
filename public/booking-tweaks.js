@@ -691,9 +691,10 @@
     const v = new URLSearchParams(location.search).get("staffId") || "";
     return location.pathname === "/book" && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(v) ? v : "";
   })();
-  let nomStaff; // undefined＝読み込み中／null＝指名できない／スタッフ
+  // サーバーがページに入れておいたスタッフの情報（window.__cnNom）があれば、通信を待たずにすぐ使う
+  let nomStaff = NOM_ID && "__cnNom" in window ? window.__cnNom : undefined; // undefined＝読み込み中／null＝指名できない／スタッフ
   let nomLoading = false;
-  if (NOM_ID) {
+  if (NOM_ID && nomStaff === undefined) {
     // 絞り込む前のメニュー一覧が一瞬見えないよう、読み込みが済むまで一覧を隠す（最長8秒）
     const pre = document.createElement("style");
     pre.id = "fm-nom-pre";
@@ -758,6 +759,8 @@
     }
     stack.before(bar);
   }
+  // 画面の部品の準備ができたら、0.7秒ごとの確認を待たずにすぐ指名スタッフを出す
+  if (NOM_ID) whenHydrated.then(() => decorateNomination());
   // メニューを選んだら、日時選択へ指名つきで進む（予約サイトの画面部品は指名を知らないため、ここでページごと移動する）
   document.addEventListener("click", (e) => {
     if (!NOM_ID || !nomStaff || location.pathname !== "/book") return;

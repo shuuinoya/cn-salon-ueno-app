@@ -2415,6 +2415,37 @@ function staffPhotoVersion(id) {
   return v;
 }
 
+// スタッフ紹介ページ用：指名できるスタッフ全員（写真・指名料・紹介文と、指名して予約できるメニュー）
+// 条件は予約画面の指名候補（nominatableStaff）と同じ：受付中・個人指名あり・メニュー対応・メニューの性別指定。
+// 毎回いまの登録内容から作るので、管理画面の「スタッフ情報」を保存すると次に開いたとき（開いたままのページも1分以内）に反映される
+function publicStaffList() {
+  const courses = [...courseStore.values()];
+  return state.staff
+    .filter((st) => st.active === 1 && profileOf(st).personalNomination)
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((st) => {
+      const pr = profileOf(st);
+      const pv = staffPhotoVersion(st.id);
+      return {
+        id: st.id,
+        name: pr.nickname || st.name,
+        gender: st.gender,
+        nominationFee: Number(pr.nominationFee) || 0,
+        message: pr.message || "",
+        // 写真のURLには写真の中身から作った印をつける（差し替えるとURLが変わり、古い写真が残らない）
+        photo: pv ? `/api/staff/photo?id=${encodeURIComponent(st.id)}&v=${pv}` : "",
+        courses: courses.filter((c) => staffCanDo(st, c.id) && [st.gender, "none"].includes(courseGender(c.id))).map((c) => c.id),
+      };
+    });
+}
+// 「指名して予約する」で来たメニュー選択ページ用：そのスタッフ（指名できなければ null）。紹介文は要らないので外す
+function nominationOf(staffId) {
+  const st = publicStaffList().find((x) => x.id === staffId);
+  if (!st) return null;
+  const { message, ...rest } = st;
+  return rest;
+}
+
 // 指名候補スタッフ一覧（受付中・個人指名あり・コース対応・性別条件）
 function nominatableStaff(courseId, genderPref) {
   return state.staff
@@ -3397,28 +3428,9 @@ function handleDemoApi(req, res, url) {
     res.end(req.method === "HEAD" ? undefined : JSON.stringify({ staff: nominatableStaff(courseId, effectivePref(courseId, pref)) }));
     return true;
   }
-  // スタッフ紹介ページ用：指名できるスタッフ全員（写真・指名料・紹介文と、指名して予約できるメニュー）
-  // 条件は予約画面の指名候補（nominatableStaff）と同じ：受付中・個人指名あり・メニュー対応・メニューの性別指定。
-  // 毎回いまの登録内容から作るので、管理画面の「スタッフ情報」を保存すると次に開いたとき（開いたままのページも1分以内）に反映される
+  // スタッフ紹介ページ用（publicStaffList）
   if (url.pathname === "/api/staff/list" && (req.method === "GET" || req.method === "HEAD")) {
-    const courses = [...courseStore.values()];
-    const staff = state.staff
-      .filter((st) => st.active === 1 && profileOf(st).personalNomination)
-      .sort((a, b) => a.sort_order - b.sort_order)
-      .map((st) => {
-        const pr = profileOf(st);
-        const pv = staffPhotoVersion(st.id);
-        return {
-          id: st.id,
-          name: pr.nickname || st.name,
-          gender: st.gender,
-          nominationFee: Number(pr.nominationFee) || 0,
-          message: pr.message || "",
-          // 写真のURLには写真の中身から作った印をつける（差し替えるとURLが変わり、古い写真が残らない）
-          photo: pv ? `/api/staff/photo?id=${encodeURIComponent(st.id)}&v=${pv}` : "",
-          courses: courses.filter((c) => staffCanDo(st, c.id) && [st.gender, "none"].includes(courseGender(c.id))).map((c) => c.id),
-        };
-      });
+    const staff = publicStaffList();
     // ページ（pm-staff.html）の版：書き換えたら、開いたままのスタッフ紹介ページが新しい版に読み込み直す
     let page = 0;
     try { page = Math.floor(fs.statSync(path.join(__dirname, "pages", "pm-staff.html")).mtimeMs); } catch {}
@@ -4460,4 +4472,4 @@ function handleDemoApi(req, res, url) {
   return true;
 }
 
-module.exports = { handleDemoApi, isAdminSession, clearSession, ready: persistReady };
+module.exports = { handleDemoApi, isAdminSession, clearSession, ready: persistReady, nominationOf };

@@ -5,7 +5,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 
-const { handleDemoApi, isAdminSession, clearSession, ready: demoReady } = require("./demo-api");
+const { handleDemoApi, isAdminSession, clearSession, ready: demoReady, nominationOf } = require("./demo-api");
 
 const ROOT = __dirname;
 const PUBLIC = path.join(ROOT, "public");
@@ -145,6 +145,24 @@ function sendFile(res, file, status, type, head, url, req) {
           text = text.replace("</body>", '<script src="/member.js?v=' + fileVer("member.js") + '" defer></script></body>');
           // 予約サイトのレイアウト補正（タブレット幅で本文の列を中央に置く）
           text = text.replace("</head>", '<link rel="stylesheet" href="/booking-layout.css?v=' + fileVer("booking-layout.css") + '"/></head>');
+        }
+        // スタッフ紹介の「指名して予約する」で来たメニュー選択（/book?staffId=…）：
+        // そのスタッフが担当できるメニューだけを最初から表示する指定（CSS）と、スタッフの情報を最初から入れておく
+        // （画面の部品の準備や通信を待たずに、すぐ絞り込んだ一覧と指名スタッフを出せる。CSSとheadの差し込みなので画面の組み立てとは食い違わない）
+        if (url.pathname === "/book" && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(url.searchParams.get("staffId") || "")) {
+          let nom = null;
+          try { nom = nominationOf(url.searchParams.get("staffId")); } catch {}
+          let css = "";
+          if (nom) {
+            const row = 'a.menu-row[href^="/book/select-datetime"]';
+            const ok = nom.courses.filter((id) => /^[0-9-]+$/.test(id));
+            const notOk = ok.map((id) => `:not([href$="courses=${id}"]):not([href*="courses=${id}&"])`).join("");
+            const has = ok.map((id) => `a.menu-row[href$="courses=${id}"],a.menu-row[href*="courses=${id}&"]`).join(",");
+            css = `.list-stack ${row}${notOk}{display:none!important}` +
+              `.list-stack .list-card:has(${row})${has ? `:not(:has(${has}))` : ""}{display:none!important}`;
+          }
+          const data = JSON.stringify(nom).replace(/[<>&\u2028\u2029]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
+          text = text.replace("</head>", (css ? '<style id="fm-nom-filter">' + css + "</style>" : "") + "<script>window.__cnNom=" + data + ";</script></head>");
         }
         // 予約・メニューページには、フリーメッセージ設定の反映と会員向け回数券表示のスクリプトを差し込む
         if (url.pathname.startsWith("/book") || url.pathname.startsWith("/menus")) {

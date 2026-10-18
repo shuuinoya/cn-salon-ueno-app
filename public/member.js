@@ -12,6 +12,8 @@
 (function () {
   "use strict";
   if (window.CNMember) return;
+  // 押したときの軽い動き（booking-layout.css の :active）を、iPhone などのタッチ操作でも出す
+  document.addEventListener("touchstart", () => {}, { passive: true });
 
   // 多言語：画面の文言は日本語の原文で持ち、表示する言語の訳は共通の辞書（cn-i18n.js）から引く（8か国語）
   const I18N = window.CNI18N || null;

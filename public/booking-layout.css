@@ -12,3 +12,24 @@
 @media (max-width: 767px) {
   .header-actions .login-button { display: flex; width: 60px; min-width: 60px; }
 }
+
+/* 押したときの軽い動き（予約サイト全体）：押している間だけ少し縮んで、わずかに暗くなる。
+   動きを減らす設定にしている端末では出さない（スマホでも効くよう member.js で touchstart を受けている） */
+@media (prefers-reduced-motion: no-preference) {
+  .booking-button, .side-submit, .login-button, .language-button, .language-menu button, .nav-item, .mobile-item,
+  .menu-row, .staff-select-trigger, .staff-picker-item, .staff-picker-footer button, .slot-open, .native-calendar button,
+  .booking-form button, .back-to-calendar, .st-photo, .st-more, .st-d-close, #fm-nom-bar a, .fm-agree {
+    transition: transform 0.12s ease, filter 0.12s ease;
+  }
+  .booking-button:not(:disabled):active, .side-submit:not(:disabled):active, .login-button:active, .language-button:active,
+  .language-menu button:active, .nav-item:active, .mobile-item:active, .staff-picker-footer button:active,
+  .slot-open:active, .native-calendar button:not(:disabled):active, .booking-form button:not(:disabled):active,
+  .back-to-calendar:active, .st-photo:active, .st-more:active, .st-d-close:active, #fm-nom-bar a:active, .fm-agree:not(:disabled):active {
+    transform: scale(0.96);
+    filter: brightness(0.94);
+  }
+  .menu-row:active, .staff-select-trigger:active, .staff-picker-item:active {
+    transform: scale(0.985);
+    filter: brightness(0.97);
+  }
+}
