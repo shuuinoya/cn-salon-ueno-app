@@ -3742,7 +3742,7 @@ function handleDemoApi(req, res, url) {
   }
   if (url.pathname === "/api/demo/locks" && (req.method === "GET" || req.method === "HEAD")) {
     const ld = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get("date") || "") ? url.searchParams.get("date") : todayJst();
-    const locks = state.staff.map((st) => ({ id: st.id, name: st.name, locked: staffLockedOn(st.id, ld) ? 1 : 0, date: ld }));
+    const locks = state.staff.map((st) => ({ id: st.id, name: st.name, gender: st.gender, locked: staffLockedOn(st.id, ld) ? 1 : 0, date: ld })); // gender：台帳の名前の左の帯の色（女性ピンク／男性ブルー）
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
     res.end(req.method === "HEAD" ? undefined : JSON.stringify({ locks }));
     return true;

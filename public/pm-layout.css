@@ -1901,3 +1901,34 @@ main.ledger-app .ledger-row > .ledger-staff-cell { position: sticky; left: 0; }
 
 /* 右上の警告バッジ：0件のときは出さない */
 #pm-warn[hidden], #pm-alert[hidden] { display: none !important; }
+
+/* ---- ドラッグ中の移動先の影：紫をやめて、台帳になじむ薄い色に（白いシフトの枠・灰色の時間帯のどちらでも見える） ---- */
+main.ledger-app .ledger-drag-ghost {
+  color: #5b4a3e;
+  background: rgb(176 141 108 / 0.18);
+  border: 2px dashed #b49a85;
+  border-radius: 2px;
+}
+
+/* ---- 台帳の色合いを本物（Peak Manager）に合わせる ----
+   ・名前の欄の左の帯：女性＝ピンク／男性＝ブルー（保存CSSの「全員水色・!important」を上書き）
+   ・名前の欄と上の時刻の欄：ごく薄い灰色
+   ・シフトの時間帯：10分ごとの細い線をはっきり、1時間ごとの線は少し濃く（シフト外の灰色も本物に合わせて少し明るく）
+   ・受付停止（鍵）の行：本物の青紫の色味は付けず、ごく薄い灰色に */
+main.ledger-app .ledger-row:not(.ledger-grid-head) > .ledger-staff-cell { background: #f7f7f7 !important; }
+main.ledger-app .pm-acc-f > .ledger-staff-cell { border-left: 4px solid #eaa59e !important; }
+main.ledger-app .pm-acc-m > .ledger-staff-cell { border-left: 4px solid #a3c3e8 !important; }
+main.ledger-app .ledger-row.pm-locked:not(.ledger-grid-head) > .ledger-staff-cell { background: #eeeeee !important; }
+main.ledger-app .ledger-row.pm-pink:not(.ledger-grid-head) > .ledger-staff-cell { background: #fdeaea !important; }
+main.ledger-app .ledger-track { background: #cacaca; }
+main.ledger-app .ledger-onshift, main.ledger-app .pm-blue .ledger-onshift { background: #fff !important; }
+main.ledger-app .pm-locked .ledger-onshift { background: #f6f6f6 !important; }
+main.ledger-app .ledger-track::after {
+  background-image:
+    repeating-linear-gradient(90deg, transparent 0 calc(0.980392% - 1px), rgb(0 0 0 / 0.16) calc(0.980392% - 1px) 0.980392%),
+    repeating-linear-gradient(90deg, transparent 0 calc(5.88235% - 1px), rgb(0 0 0 / 0.3) calc(5.88235% - 1px) 5.88235%);
+}
+/* 時刻の丸が並ぶ帯・丸・上の時刻の欄（各時間の予約数）も本物の明るさに */
+main.ledger-app .ledger-grid-head, main.ledger-app .ledger-grid-head .ledger-staff-cell { background: #a9a9a9 !important; border-left-color: #a9a9a9 !important; }
+main.ledger-app .ledger-hours b { background: #7a7a7a; }
+main.ledger-app .ledger-overview > button:not(.pm-now) { background: #f7f7f7; }
