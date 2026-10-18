@@ -175,6 +175,10 @@ function sendFile(res, file, status, type, head, url, req) {
         } else {
           text = text.split("/favicon.svg").join("/pm-clover.svg?v=" + fileVer("pm-clover.svg"));
         }
+        // 管理画面の全ページに、操作アニメーション（pm-motion.css）を差し込む（書き換えたらすぐ届くよう版番号つき）
+        if (brandFor(file, url) === ADMIN_BRAND) {
+          text = text.replace("</head>", '<link rel="stylesheet" href="/pm-motion.css?v=' + fileVer("pm-motion.css") + '"/></head>');
+        }
         // 管理画面の上書きスクリプト・CSSにも版番号を付け、古いキャッシュが残らないようにする
         text = text
           .split('href="/pm-layout.css"').join('href="/pm-layout.css?v=' + PM_VER + '"')

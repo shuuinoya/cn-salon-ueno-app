@@ -1,0 +1,70 @@
+/* 管理画面（CNsalon@board）の操作アニメーション。管理画面の全ページにサーバーが差し込む（予約サイトには入れない）
+   ・速さ：素早い 0.12秒（押す）／ふつう 0.18秒（色・影・出る）／ゆっくり 0.24秒（ポップアップ・お知らせ）
+   ・動き方：最初は速く、最後はゆっくり止まる（cubic-bezier(0.2, 0.8, 0.2, 1)）
+   ・台帳の枠（ドラッグで動かすもの）は位置・大きさを動かさない（影だけ）。ドラッグの位置計算に影響しないように
+   ・端末で「動きを減らす」設定にしている人には、すべて動かさない */
+:root {
+  --pm-fast: 0.12s;
+  --pm-base: 0.18s;
+  --pm-slow: 0.24s;
+  --pm-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* 1) 色・枠線・影の変化はなめらかに（:where で強さ0。もともと動きの設定がある部品はそちらを優先） */
+  :where(button, a, summary, input, select, textarea, label, [role="button"], [role="tab"]) {
+    transition:
+      background-color var(--pm-base) var(--pm-ease),
+      border-color var(--pm-base) var(--pm-ease),
+      color var(--pm-base) var(--pm-ease),
+      box-shadow var(--pm-base) var(--pm-ease),
+      filter var(--pm-fast) var(--pm-ease),
+      transform var(--pm-fast) var(--pm-ease);
+  }
+
+  /* 2) ボタンを押している間だけ、少し縮んでわずかに暗くなる（台帳の枠・画面の位置を transform で決めている部品は除く） */
+  :where(button, summary, [role="button"]):not(:disabled):not(.ledger-event):not(#pm-sync-pending):active {
+    transform: scale(0.97);
+    filter: brightness(0.95);
+  }
+
+  /* 3) 台帳の枠：マウスを乗せると影がつく（位置・大きさは変えない） */
+  main.ledger-app .ledger-event {
+    transition: box-shadow var(--pm-base) var(--pm-ease), filter var(--pm-base) var(--pm-ease);
+  }
+  main.ledger-app .ledger-event:hover {
+    box-shadow: 0 2px 8px rgb(0 0 0 / 0.22);
+    filter: brightness(1.03);
+  }
+
+  /* 4) ポップアップ：背景はふわっと暗くなり、本体は少し下から浮かび上がる */
+  .ledger-modal-backdrop, #pm-shop-modal, #pm-menu-modal, #pm-checkout, #pm-ticket-modal, #pm-account-modal, #pm-shiftadd {
+    animation: pm-fade var(--pm-base) var(--pm-ease);
+  }
+  .ledger-modal, #pm-shop-modal > :first-child, #pm-menu-modal > :first-child, #pm-checkout > :first-child,
+  #pm-ticket-modal > :first-child, #pm-account-modal > :first-child, #pm-shiftadd > :first-child {
+    animation: pm-lift var(--pm-slow) var(--pm-ease);
+  }
+
+  /* 5) 横の入力欄（予約以外の登録など）・シフト情報：ふわっと出る */
+  main.ledger-app .ledger-side-form, main.ledger-app section.ledger-shift-detail {
+    animation: pm-fade-up var(--pm-base) var(--pm-ease);
+  }
+
+  /* 6) メニュー・日付の吹き出し：上からすっと出る（日付は色分けの準備が済んでから） */
+  .ledger-nav-menu[open] > :not(summary), #pm-usermenu, #pm-dailymenu,
+  main.ledger-app .ledger-date-popover.pm-cal-ready {
+    animation: pm-drop var(--pm-base) var(--pm-ease);
+  }
+
+  /* 7) お知らせ：下からすっと出る */
+  #pm-toast {
+    animation: pm-toast-in var(--pm-slow) var(--pm-ease);
+  }
+}
+
+@keyframes pm-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pm-lift { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes pm-fade-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes pm-drop { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@keyframes pm-toast-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
