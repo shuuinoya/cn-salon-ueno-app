@@ -7,7 +7,9 @@
 ## サイト
 - 予約サイト（お客様用）と管理画面（CNsalon@board）を、1つのサーバー（`server.js`＋`demo-api.js`）で動かしています
 - 本番の住所：https://cn-salon.taila11357.ts.net （管理画面は `/cnsalon-board`）
-- 本番はMacの上で動いています（「このMacで本番を動かす.command」で起動・「このMacの本番を止める.command」で停止。止まらないように launchd の LaunchAgent `jp.cnsalon.production` が見張る）
+- **本番はデスクトップのiMacで動いています**（2026-10-19から）。本番用フォルダは iMac の `~/CNsalon本番（移動禁止）`。**このフォルダでは作業しない・移動や削除をしない**（Codex の作業フォルダは `~/Desktop/cn-salon-ueno`）。「このMacで本番を動かす.command」で起動・「このMacの本番を止める.command」で停止。止まらないように launchd の LaunchAgent `jp.cnsalon.production` が見張る
+- 本番は1台だけ：Tailscale の名前が `cn-salon`（公開URLの持ち主）のMacでしか起動しない作りになっている。MacBook は作業用
+- **本番への反映**：作業フォルダで commit・push → iMac の本番用フォルダで `git pull --ff-only origin main` → `server.js`・`demo-api.js`・`persist.js` を変えたときだけ `kill -TERM $(pgrep -f '^/usr/local/bin/node server.js$')`（約5秒で戻る）。反映したら公開URLで確かめる（README の「このMacで本番を動かす」も参照）
 - 仕組みの説明は README.md にあります（変えたら README.md も書き足す）
 
 ## 2台で作業するときの決まり

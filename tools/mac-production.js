@@ -42,7 +42,8 @@ if (!fileEnv.GH_TOKEN || !fileEnv.GH_REPO) {
   console.log("  GH_REPO=ユーザー名/リポジトリ名\n");
   process.exit(1);
 }
-if (!fs.existsSync(CF)) {
+// cloudflared は、固定URL（Tailscale：PUBLIC_URL あり）のときは使わないので、無くても起動する
+if (!fileEnv.PUBLIC_URL && !fs.existsSync(CF)) {
   console.log("tools/bin/cloudflared が見つかりません（インターネット公開に必要です）");
   process.exit(1);
 }
@@ -206,8 +207,28 @@ function ensureFunnel(host) {
   });
 }
 
+// 固定URL（Tailscale）の持ち主か：このMacの Tailscale の名前が公開URLと同じときだけ本番を動かす。
+// 本番は1台だけ（今はデスクトップのiMac）。別のMacで間違って起動しても、2台で同じデータを上書きし合わないように止める。
+// Tailscale のコマンドが使えないときは確かめられないので、これまでどおり起動する
+function tailscaleName() {
+  try {
+    const out = require("child_process").execFileSync("/Applications/Tailscale.app/Contents/MacOS/Tailscale",
+      ["status", "--json"], { timeout: 8000, stdio: ["ignore", "pipe", "ignore"] }).toString();
+    return String(JSON.parse(out).Self?.DNSName || "").replace(/\.$/, "").toLowerCase();
+  } catch { return ""; }
+}
 function begin() {
   if (fileEnv.PUBLIC_URL) {
+    const want = fileEnv.PUBLIC_URL.replace(/^https:\/\//, "").replace(/\/+$/, "").toLowerCase();
+    const me = tailscaleName();
+    if (me && me !== want) {
+      console.log(`\n【起動しません】このMacの Tailscale の名前は ${me} です。公開URL（${want}）の本番は別のMacで動いています。`);
+      console.log("本番は1台だけで動かします（2台で動かすと、予約データを上書きし合います）。");
+      console.log("このMacに本番を戻すときは、先に向こうの本番を止めて、Tailscale の名前をこのMacへ移してください。");
+      if (BACKGROUND) setInterval(() => {}, 3600e3); // 裏側では終わらずに待つ（終わると起動し直され、同じ表示を繰り返すため）
+      else process.exit(0);
+      return;
+    }
     // 固定URL（Tailscale Funnel）で公開
     publicUrl = fileEnv.PUBLIC_URL.replace(/\/+$/, "");
     tunnelAt = Date.now();

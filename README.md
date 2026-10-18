@@ -59,6 +59,10 @@
 `pages/` と `public/` の中身は基本的に元サイトのままです。例外は、追加したページ（demo-admin.html・pm-login.html・not-found.html）と、予約確認・完了ページのラベル折り返しバグを直すために最小修正した3ファイル（BookingText-*.js・page-WafCof8Y.js・page-ChO0-Npx.js）です。
 
 ## このMacで本番を動かす（Render が使えない間）
+- **2026-10-19から、本番はデスクトップのiMac（CNdeiMac・利用者 cnsalon）で動いています**。本番用フォルダは iMac の `~/CNsalon本番（移動禁止）`（Codex の作業フォルダ `~/Desktop/cn-salon-ueno` とは別。**移動・削除・名前の変更をしない**。デスクトップに置くと裏側の本番がmacOSの保護で読めないことがある）。MacBook は作業用
+- **本番は1台だけ**：起動プログラムは、そのMacの Tailscale の名前が公開URL（`cn-salon`）と同じときだけ本番を動かす。違うMac（今は MacBook＝`cn-salon-macbook`）で「このMacで本番を動かす.command」を押しても「起動しません」と出て止まる（2台で同じデータを上書きし合わないように）
+- **本番への反映（iMac）**：作業したフォルダで commit・`git push origin main` → iMac の本番用フォルダで `git pull --ff-only origin main`（MacBook からは `git push cnsalon@CNdeiMac.local:CNsalon本番（移動禁止） main:refs/heads/incoming` → iMac で `git merge --ff-only incoming && git branch -D incoming`）。`server.js`・`demo-api.js`・`persist.js` を変えたときは、iMac で `kill -TERM $(pgrep -f '^/usr/local/bin/node server.js$')`（約5秒で同じURLのまま戻る）。`public/` の中は反映した瞬間に届く
+- **本番のMacを移すとき**（例：iMac→MacBook に戻す）：①今の本番を「このMacの本番を止める.command」で止める（最後の保存がディスクとGitHubに入る）②`data/mac-production-state.json` を新しいMacへ写して中身（sha256）を照らし合わせる ③今のMacの Tailscale の名前を変え（`tailscale serve reset`・`tailscale set --hostname=別の名前`）、新しいMacを `tailscale set --hostname=cn-salon` にする ④新しいMacで「このMacで本番を動かす.command」。公開URLの設定（Funnel）は起動プログラムが自動で行う。⑤外からの確認は `curl --resolve cn-salon.taila11357.ts.net:443:$(dig +short @8.8.8.8 cn-salon.taila11357.ts.net | head -1) https://cn-salon.taila11357.ts.net/api/tickets/plans`
 - 「**このMacで本番を動かす.command**」をダブルクリック。本番は**Macの裏側（launchd：`jp.cnsalon.production`）**で動き、**ターミナルやVS Codeの画面を閉じても止まりません**。URLは固定（Tailscale：`tools/mac-production.env` の `PUBLIC_URL`）
 - サーバーが止まっても、見張り役（`tools/mac-production.js`）が3秒後に起動し直します（何度も止まるときは1分おきに起動し直し続ける。見張り役は自分からは終わらない）
 - 止めるときは「**このMacの本番を止める.command**」（**Render に戻す前は必ず止める**。止めるとログインしても自動では始まりません）
