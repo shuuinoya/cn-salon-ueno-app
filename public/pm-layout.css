@@ -1965,3 +1965,24 @@ dialog.pm-move-confirm::backdrop { background: rgb(0 0 0 / 30%); }
   .pm-move-confirm #pm-move-confirm-message, .pm-move-confirm-actions button { font-size: 21px; }
   .pm-move-confirm-actions { gap: 16px; }
 }
+
+/* ---- 担当できないメニューの予約（今の対応メニュー・性別の設定では担当できない担当）---- */
+.pm-bg-warn { background: #d13438; }
+main.ledger-app .ledger-event.pm-ev-warn { outline: 2px dashed #d13438; outline-offset: -2px; }
+#pm-capwarn {
+  position: fixed; left: 12px; bottom: 12px; z-index: 1500;
+  background: #fff4f2; color: #b3261e; border: 1px solid #f0a8a0; border-radius: 8px;
+  padding: 8px 14px; font-size: 13px; font-weight: 700; cursor: pointer;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.15);
+}
+#pm-capwarn:hover { background: #ffe9e5; }
+#pm-capwarn-list { position: fixed; inset: 0; z-index: 2000; background: rgb(0 0 0 / 0.35); display: flex; align-items: center; justify-content: center; padding: 16px; }
+#pm-capwarn-list > div { background: #fff; border-radius: 8px; max-width: 820px; width: 100%; max-height: 80vh; overflow: auto; padding: 18px 20px; font-size: 13px; color: #292929; }
+#pm-capwarn-list h2 { margin: 0 0 8px; font-size: 16px; color: #b3261e; }
+#pm-capwarn-list p { margin: 0 0 12px; line-height: 1.6; }
+#pm-capwarn-list table { width: 100%; border-collapse: collapse; }
+#pm-capwarn-list th, #pm-capwarn-list td { border: 1px solid #e3d6cb; padding: 6px 8px; text-align: left; }
+#pm-capwarn-list th { background: #f7f1ea; }
+#pm-capwarn-list .pm-capwarn-close { margin-top: 12px; padding: 6px 16px; border: 1px solid #ccc; border-radius: 4px; background: #fff; cursor: pointer; }
+/* スタッフ情報「コース」の案内 */
+.pm-course-note { margin: 6px 0 0; font-size: 12px; line-height: 1.6; color: #6b5a4c; }

@@ -806,6 +806,12 @@ function getSchedule(date) {
     blocks: ev.blocks,
     assignments: ev.assignments,
     days,
+    // 今の設定（スタッフ情報の対応メニューのチェック・性別）では担当できない担当がついている予約。
+    // 管理画面の台帳に「対応外」の印を付けて知らせる（予約そのものは勝手に変えない・取り消さない）
+    capabilityWarnings: ev.bookings.filter((b) => b.status === "confirmed").flatMap((b) =>
+      ev.assignments.filter((a) => a.booking_id === b.id)
+        .map((a) => ({ booking_id: b.id, staff_id: a.staff_id, reason: bookingMismatch(state.staff.find((x) => x.id === a.staff_id), b) }))
+        .filter((w) => w.reason)),
     mailReady: true, // デモ：メールは生成のみ（/admin/mails で内容を確認できる）
     notifications: mailSummary(),
   };
@@ -920,9 +926,12 @@ function postSchedule(body) {
       if (!mvTarget) throw err(400, "invalid");
       if (mvTarget.active !== 1) throw err(409, "staffUnavailable"); // 退職・停止中には移せない
       if (staffLockedOn(staffId, date)) throw err(409, "staffLocked"); // その日に鍵（予約受付停止）のスタッフには入れられない
-      if (!staffCanDo(mvTarget, bk.course)) throw err(409, "soldOut"); // 対応可能メニュー外は不可
+      // 開始・終了は管理画面で変えられる（施術時間を延ばす等）。おかしな値は断り、指定された時間全体でシフト・重なりを確かめる
+      if (!(Number.isInteger(start) && Number.isInteger(end) && end > start && end - start <= 600)) throw err(400, "invalid");
+      // 担当メニュー外・性別の合わないスタッフには移せない（理由が分かるエラーを返す）
+      const mvWhy = bookingMismatch(mvTarget, bk);
+      if (mvWhy) throw mismatchError(mvWhy);
       const mvGender = courseGender(bk.course);
-      if (mvGender !== "none" && mvTarget.gender !== mvGender) throw err(409, "soldOut");
       if (!withinShift(date, staffId, start, end)) throw err(409, "outsideShift");
       if (overlaps(date, staffId, start, end, id)) throw err(409, "soldOut");
       // 複数名の予約は残りの担当も、新しい時間帯に対応可能なスタッフから割り当て直す
@@ -953,9 +962,10 @@ function postSchedule(body) {
       rejectTestData({ name: body.name, email: body.email }); // 本番に試しの予約を入れさせない（管理画面から入れる予約も同じ）
       if (cbTarget.active !== 1) throw err(409, "staffUnavailable"); // 退職・停止中のスタッフには入れられない（移動と同じ）
       if (staffLockedOn(staffId, date)) throw err(409, "staffLocked"); // その日に鍵（予約受付停止）のスタッフには入れられない
-      if (!staffCanDo(cbTarget, course)) throw err(409, "soldOut"); // 対応可能メニュー外は不可
+      const cbWhy = staffMismatch(cbTarget, course); // 担当メニュー外・性別の合わないスタッフには入れられない（管理者でも同じ）
+      if (cbWhy) throw mismatchError(cbWhy);
       const cbGender = courseGender(course);
-      if (cbGender !== "none" && cbTarget.gender !== cbGender) throw err(409, "soldOut");
+      if (!Number.isInteger(start)) throw err(400, "invalid");
       const end = start + c.minutes;
       if (!withinShift(date, staffId, start, end)) throw err(409, "outsideShift");
       if (overlaps(date, staffId, start, end)) throw err(409, "soldOut");
@@ -1028,6 +1038,14 @@ function postSchedule(body) {
       const prevStaff = state.staff.find((x) => x.id === p.id);
       const gender = p.gender || prevStaff?.gender || "none";
       if (!p.id || !String(p.name || "").trim() || !["male", "female", "none"].includes(gender)) throw err(400, "invalid");
+      // 対応メニュー：「全て」か、実在するメニューを1つ以上。チェックが1つもない設定は保存しない
+      // （空の一覧は「全て」の意味になるため、そのまま保存すると全部のメニューを担当できることになってしまう）
+      let courseList = [];
+      if (!p.allCourses) {
+        const known = new Set([...courseStore.keys()].map(String));
+        courseList = [...new Set((Array.isArray(p.courses) ? p.courses : []).map(String))].filter((cid) => known.has(cid));
+        if (!courseList.length) throw err(400, "noCourses");
+      }
       const profile = { ...(p.profile || {}) };
       delete profile.nominationFeePending;
       if (p.photo) {
@@ -1056,7 +1074,7 @@ function postSchedule(body) {
         gender,
         active: p.active ? 1 : 0,
         locked: 0, // 鍵は日ごと（days[date].locked）
-        courses: JSON.stringify(p.allCourses ? [] : p.courses || []),
+        courses: JSON.stringify(p.allCourses ? [] : courseList),
         profile: JSON.stringify(profile),
         sort_order: Number(p.sortOrder) || 0,
         profile_revision: (Number(p.staffRevision) || 0) + 1,
@@ -1065,25 +1083,25 @@ function postSchedule(body) {
       if (idx >= 0) state.staff[idx] = rec; else state.staff.push(rec);
       // 対応可能メニューから外れたメニューの予約が今後入っている場合は、
       // 予約はそのまま維持しつつ管理画面に警告を返す（勝手に削除・変更しない）
-      const newCourses = JSON.parse(rec.courses);
+      sseTouch();
       const affected = [];
-      if (newCourses.length) {
+      {
         const today = todayJst();
         for (const [d, ev2] of state.events) {
           if (d < today) continue;
           for (const b of ev2.bookings) {
             if (b.status !== "confirmed") continue;
             if (!ev2.assignments.some((a) => a.booking_id === b.id && a.staff_id === rec.id)) continue;
-            if (!newCourses.includes(b.course)) affected.push(`${fmtDateJa(d)} ${fmtTime(d, b.start_at)} ${b.reference}`);
+            if (bookingMismatch(rec, b)) affected.push(`${fmtDateJa(d)} ${fmtTime(d, b.start_at)} ${b.reference}`);
           }
         }
       }
       if (affected.length) {
         return {
           ok: true,
-          warning: `保存しました。ただし、対応可能メニューから外したメニューの予約が ${affected.length}件 入っています。\n` +
+          warning: `保存しました。ただし、このスタッフが担当できないメニュー（対応メニューのチェック・性別）の予約が ${affected.length}件 入っています。\n` +
             affected.slice(0, 5).join("\n") + (affected.length > 5 ? "\nほか" : "") +
-            "\n既存の予約はそのまま維持されます。必要に応じて担当変更または取消をしてください。",
+            "\n既存の予約はそのまま維持されます（台帳に「対応外」の印が付きます）。必要に応じて担当変更または取消をしてください。",
         };
       }
       return { ok: true };
@@ -2440,9 +2458,33 @@ function rejectTestData(who) {
   if (BLOCK_TEST_DATA && looksLikeTest(who)) throw err(400, "testDataNotAllowed");
 }
 
+// スタッフがそのメニューを担当できるか（管理画面のスタッフ情報「コース」のチェック。サーバーに保存された設定で判定）。
+// 保存の形：空の一覧＝「全て」にチェック（今後増えるメニューも含めて全部できる）／メニューIDの一覧＝チェックしたメニューだけ。
+// 「チェックが1つもない」状態は保存できない（下の staff の保存で断る）
 function staffCanDo(st, courseId) {
-  const list = JSON.parse(st.courses || "[]");
+  let list;
+  try { list = JSON.parse(st.courses || "[]"); } catch { return false; } // 壊れた設定は「できない」扱い（誤って割り当てない）
+  if (!Array.isArray(list)) return false;
   return list.length === 0 || list.includes(courseId);
+}
+// 予約の担当にしてよいか：担当メニューのチェックと、メニュー名の性別指定（女性限定＝女性スタッフだけ等）。
+// だめなときは理由（"course"＝担当メニュー外／"gender"＝性別が合わない）、よければ null
+function staffMismatch(st, courseId) {
+  if (!st || !staffCanDo(st, courseId)) return "course";
+  const g = courseGender(courseId);
+  if (g !== "none" && st.gender !== g) return "gender";
+  return null;
+}
+const mismatchError = (why) => err(409, why === "gender" ? "staffGenderOnly" : "staffCannotDoCourse");
+// 既にある予約をそのスタッフが担当してよいか。メニューが特定できない予約（ホットペッパーのメニュー名が
+// こちらのメニューと一致しない等）は、「全て」にチェックのスタッフだけが担当できる（メニュー名の性別指定も守る）
+function bookingMismatch(st, bk) {
+  if (bk.course) return staffMismatch(st, bk.course);
+  if (!st || !staffCanDo(st, "")) return "course"; // 「全て」以外（メニューを選んで設定）のスタッフは不可
+  const nm = String(bk.course_name || "");
+  const g = nm.includes("女性") ? "female" : nm.includes("男性") ? "male" : "none";
+  if (g !== "none" && st.gender !== g) return "gender";
+  return null;
 }
 
 // コース名に性別指定がある場合は、リクエストの希望より優先する
@@ -2595,15 +2637,19 @@ function hpNotify(b, via) {
 
   const course = [...courseStore.values()].find((c) => c.name === menu) || null;
   const gender = course ? courseGender(course.id) : (menu.includes("女性") ? "female" : menu.includes("男性") ? "male" : "none");
-  let candidates = state.staff
-    .filter((st) => st.active === 1 && !staffLockedOn(st.id, date))
-    .filter((st) => (course ? staffCanDo(st, course.id) : true))
-    .filter((st) => gender === "none" || st.gender === gender)
+  // 担当できるスタッフ：受付中・鍵なし・担当メニューのチェック・性別指定（メニュー名がこちらのメニューと一致しないときは
+  // メニューを特定できないので「全て」にチェックのスタッフだけ）。担当できないスタッフに割り当てて受け付けることはしない
+  const bkLike = { course: course ? course.id : "", course_name: menu };
+  const wantName = String(b.staffName || "").trim();
+  const capable = state.staff
+    .filter((st) => st.active === 1 && !staffLockedOn(st.id, date) && !bookingMismatch(st, bkLike))
+    .filter((st) => !wantName || st.name === wantName);
+  const candidates = capable
     .filter((st) => withinShift(date, st.id, start, end) && !overlaps(date, st.id, start, end))
     .sort((a, c) => a.sort_order - c.sort_order);
-  const wantName = String(b.staffName || "").trim();
-  if (wantName) candidates = candidates.filter((st) => st.name === wantName);
-  if (!candidates.length) return failed(409, "slotTaken", { rid, date, time: fmtTime2(start) + "〜" + fmtTime2(end), menu });
+  const when = { rid, date, time: fmtTime2(start) + "〜" + fmtTime2(end), menu };
+  if (!capable.length) return failed(409, "noCapableStaff", when); // このメニューを担当できるスタッフがいない
+  if (!candidates.length) return failed(409, "slotTaken", when);
 
   const assignee = candidates[0];
   state.bookingSerial++;
@@ -3326,6 +3372,30 @@ function handleDemoApi(req, res, url) {
       Math.max(m.createdAt || 0, m.scheduledAt || 0) > seen).length;
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
     res.end(req.method === "HEAD" ? undefined : JSON.stringify({ failedMails }));
+    return true;
+  }
+  // 今の設定（スタッフ情報の対応メニューのチェック・性別）では担当できない担当がついている、今日以降の予約の一覧。
+  // 対応メニューを外したあとに残った予約を、管理者が確かめて担当変更・取消できるようにする（予約は勝手に変えない）
+  if (url.pathname === "/api/demo/capability-warnings" && (req.method === "GET" || req.method === "HEAD")) {
+    const today = todayJst();
+    const staffById = new Map(state.staff.map((x) => [x.id, x]));
+    const warnings = [];
+    for (const [d, ev2] of state.events) {
+      if (d < today) continue;
+      for (const b of ev2.bookings) {
+        if (b.status !== "confirmed") continue;
+        for (const a of ev2.assignments) {
+          if (a.booking_id !== b.id) continue;
+          const st = staffById.get(a.staff_id);
+          const reason = bookingMismatch(st, b);
+          if (reason) warnings.push({ date: d, time: fmtTime(d, b.start_at), start: b.start_at, reference: b.reference, booking_id: b.id,
+            staff_id: a.staff_id, staff: st ? (profileOf(st).nickname || st.name) : "（削除されたスタッフ）", course: b.course_name || "", reason });
+        }
+      }
+    }
+    warnings.sort((x, y) => x.start - y.start);
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    res.end(req.method === "HEAD" ? undefined : JSON.stringify({ warnings }));
     return true;
   }
   // お客様へのメールの言語（オン：ご予約・ご購入・会員登録時の言語で送る／オフ：全員に日本語）

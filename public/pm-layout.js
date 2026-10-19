@@ -619,6 +619,9 @@
     // 3c8) 空き枠パネルを本物の「予約の登録／性別選択／予約以外の登録」構成にする
     decorateNewPanel();
 
+    // 3c8b) スタッフ情報の「コース」：一部だけ選んだカテゴリを「－」で表示し、チェックの意味を案内する
+    window.__pmDecorateCourseGroups?.();
+
     // 3c5) 「日次管理」メニュー：営業実績（日報）ページを開けるようにする
     const dailyBtn = [...document.querySelectorAll(".ledger-nav > nav > button")]
       .find((b) => b.textContent.trim().startsWith("日次管理"));
@@ -1013,9 +1016,16 @@
           Math.abs(pmMin(date, b.start_at) - startMin) <= 3);
         if (!bk) return;
         const s0 = pmMin(date, bk.start_at), e0 = pmMin(date, bk.end_at);
-        const key = "k" + bk.id + s0 + e0 + (bk.paid_amount || 0) + (bk.name || "");
+        // 今の設定（スタッフ情報の対応メニュー・性別）では、このスタッフが担当できない予約（サーバーが判定）
+        const warn = (d.capabilityWarnings || []).find((w) => w.booking_id === bk.id && w.staff_id === sid);
+        const key = "k" + bk.id + s0 + e0 + (bk.paid_amount || 0) + (bk.name || "") + (warn ? "w" + warn.reason : "");
         if (el.dataset.pmEv === key) return;
         el.dataset.pmEv = key;
+        el.classList.toggle("pm-ev-warn", !!warn);
+        if (warn) el.title = warn.reason === "gender"
+          ? "このメニューは性別が指定されたメニューのため、このスタッフは担当できません。担当変更または取消を検討してください。"
+          : "このスタッフは選択されたメニューに対応していません（スタッフ情報の「コース」にチェックがありません）。担当変更または取消を検討してください。";
+        else el.removeAttribute("title");
         const nominated = !!(bk.nominated_staff_id || bk.nomination_fee);
         const cname = bk.course_name || "";
         const col = cname.includes("男性") ? "purple" : cname.includes("女性") ? "red"
@@ -1023,6 +1033,7 @@
         el.classList.remove("lime", "purple");
         el.classList.add("pm-ev", "pm-ev-" + col);
         let l1 = "";
+        if (warn) l1 += badge("warn", "対応外");
         if (bk.source === "hotpepper") l1 += badge("hp", "HP");
         if (bk.ticket_id) l1 += badge("tk", "券");
         if (!nominated && bk.staff === "male") l1 += badge("m", "男");
@@ -1399,6 +1410,9 @@
         outsideShift: "移動先スタッフのシフト時間外です。",
         scheduleConflict: "画面の情報が古くなっています。最新の状態で再度お試しください。",
         staffUnavailable: "そのスタッフには移動できません。",
+        staffCannotDoCourse: "このスタッフは選択されたメニューに対応していません（スタッフ情報の「コース」でこのメニューにチェックがありません）。",
+        staffGenderOnly: "このメニューは性別が指定されたメニュー（女性限定・男性限定）のため、このスタッフには移動できません。",
+        staffLocked: "このスタッフはこの日、受付停止（鍵）になっています。",
         nominatedLocked: "指名のお客様の予約は、別の時間・別のスタッフへ動かせません。",
         notFound: "この予約は既に取消されています。",
       }[out.error] || "移動できませんでした。";
@@ -2786,6 +2800,7 @@
       refreshSched(true).then(decorateEvents);
       refreshLocks(true);
       window.__pmRefreshAlerts?.();
+      window.__pmRefreshCapWarn?.();
       refreshShop(true);
       window.__pmCoursesAt = 0;
       prefetchCalendar();
@@ -3140,4 +3155,89 @@
   setInterval(check, 60000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) check(); });
   setInterval(() => { if (pending && !document.hidden && !busy()) location.reload(); }, 3000);
+})();
+
+
+// ---- スタッフの対応メニュー（担当できるメニュー）の表示 ----
+// ・スタッフ情報の「コース」：カテゴリのチェックは「そのカテゴリのメニューをまとめて選ぶ・外す」ボタン。
+//   一部だけ選んだカテゴリは「－」（どちらでもない）で表示し、全部外れているように見えて誤解しないようにする
+// ・今の設定では担当できない担当がついている今後の予約を、画面の左下に件数で知らせ、押すと一覧を出す（予約は変えない）
+(function () {
+  "use strict";
+  if (window.__pmCapUi) return;
+  window.__pmCapUi = 1;
+  const esc = (t) => String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+  function decorateCourseGroups() {
+    const root = document.querySelector(".staff-course-groups");
+    if (!root) return;
+    const tally = (inputs) => { const n = inputs.filter((i) => i.checked).length; return { n, all: inputs.length }; };
+    let total = [];
+    for (const fs of root.querySelectorAll(":scope > fieldset")) {
+      const head = fs.querySelector(":scope > legend input[type=checkbox]");
+      const items = [...fs.querySelectorAll(":scope > div input[type=checkbox]")];
+      total = total.concat(items);
+      if (!head || !items.length) continue;
+      const t = tally(items);
+      const mixed = t.n > 0 && t.n < t.all;
+      if (head.indeterminate !== mixed) head.indeterminate = mixed;
+      const lab = head.closest("label");
+      if (lab) lab.title = mixed ? `このカテゴリは ${t.n}/${t.all} のメニューにチェックがあります（押すとまとめて選ぶ・外す）` : "押すと、このカテゴリのメニューをまとめて選ぶ・外す";
+    }
+    const allBox = root.querySelector(":scope > legend input[type=checkbox]");
+    if (allBox && total.length) { const t = tally(total); const mixed = t.n > 0 && t.n < t.all; if (allBox.indeterminate !== mixed) allBox.indeterminate = mixed; }
+    if (!root.parentElement?.querySelector(":scope > .pm-course-note")) {
+      const p = document.createElement("p");
+      p.className = "pm-course-note";
+      p.textContent = "予約を受けられるのは、チェックが入っているメニューだけです（予約サイトの指名・指名なしの自動の担当・管理画面からの登録すべてに適用）。" +
+        "カテゴリのチェックは、そのカテゴリのメニューをまとめて選ぶ・外すためのもので、一部だけ選んでいるときは「－」で表示します。" +
+        "「全て」は、今後増えるメニューも含めて全部担当できる設定です。変更は「保存」を押すまで反映されません。";
+      root.insertAdjacentElement("afterend", p);
+    }
+  }
+  window.__pmDecorateCourseGroups = decorateCourseGroups;
+  document.addEventListener("change", (e) => { if (e.target.closest && e.target.closest(".staff-course-groups")) setTimeout(decorateCourseGroups, 0); }, true);
+
+  if (location.pathname !== "/admin") return;
+  let lastKey = "";
+  async function refreshCapWarn() {
+    let list;
+    try {
+      const r = await fetch("/api/demo/capability-warnings", { cache: "no-store" });
+      if (!r.ok) return;
+      list = (await r.json()).warnings || [];
+    } catch { return; }
+    const key = JSON.stringify(list.map((w) => [w.booking_id, w.staff_id, w.reason]));
+    let bar = document.getElementById("pm-capwarn");
+    if (key === lastKey && (bar || !list.length)) return;
+    lastKey = key;
+    if (!list.length) { bar?.remove(); document.getElementById("pm-capwarn-list")?.remove(); return; }
+    if (!bar) {
+      bar = document.createElement("button");
+      bar.type = "button";
+      bar.id = "pm-capwarn";
+      bar.addEventListener("click", () => showList(bar._list || []));
+      document.body.appendChild(bar);
+    }
+    bar._list = list;
+    bar.textContent = "⚠ 担当できないメニューの予約が " + list.length + "件 あります（押すと一覧）";
+  }
+  function showList(list) {
+    document.getElementById("pm-capwarn-list")?.remove();
+    const wrap = document.createElement("div");
+    wrap.id = "pm-capwarn-list";
+    wrap.innerHTML = '<div role="dialog" aria-label="担当できないメニューの予約"><h2>担当できないメニューの予約（' + list.length + "件）</h2>" +
+      "<p>スタッフ情報の対応メニュー（「コース」のチェック）や性別の設定では、この担当では受けられない予約です。予約はそのまま残っています。" +
+      "必要に応じて、台帳で担当できるスタッフへ移動するか、お客様に連絡のうえ取消してください。</p>" +
+      "<table><thead><tr><th>日付</th><th>時間</th><th>予約番号</th><th>担当</th><th>メニュー</th><th>理由</th></tr></thead><tbody>" +
+      list.map((w) => "<tr><td>" + esc(w.date) + "</td><td>" + esc(w.time) + "</td><td>" + esc(w.reference) + "</td><td>" + esc(w.staff) + "</td><td>" + esc(w.course) +
+        "</td><td>" + (w.reason === "gender" ? "性別が指定されたメニュー" : "対応メニューにチェックなし") + "</td></tr>").join("") +
+      '</tbody></table><button type="button" class="pm-capwarn-close">閉じる</button></div>';
+    wrap.addEventListener("click", (e) => { if (e.target === wrap || e.target.closest(".pm-capwarn-close")) wrap.remove(); });
+    document.body.appendChild(wrap);
+  }
+  window.__pmRefreshCapWarn = refreshCapWarn;
+  setTimeout(refreshCapWarn, 1200);
+  setInterval(() => { if (!document.hidden) refreshCapWarn(); }, 60000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshCapWarn(); });
 })();

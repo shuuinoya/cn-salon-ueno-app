@@ -146,7 +146,7 @@ function bootPaths(req, url) {
     const from = addDays(first, -new Date(first + "T00:00:00Z").getUTCDay());
     return [`/api/demo/schedule?date=${today}`, `/api/demo/locks?date=${today}`, "/api/demo/settings",
       `/api/demo/calendar?from=${from}&days=42`, "/api/demo/build", "/api/demo/alerts", "/api/demo/whoami",
-      "/api/demo/courses", "/api/demo/recent-bookings"];
+      "/api/demo/courses", "/api/demo/recent-bookings", "/api/demo/capability-warnings"];
   }
   if (p.startsWith("/admin") || p.startsWith("/api/") || p === "/demo/admin") return [];
   const list = ["/api/member/me"];

@@ -125,6 +125,12 @@
   }
   var esc = function (t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/\'/g, "&#39;"); };
 
+  // 受け付けなかった理由を日本語で（記録には記号で残る）
+  var HP_REASON = {
+    slotTaken: "その時間に空いているスタッフがいません",
+    noCapableStaff: "このメニューを担当できるスタッフがいません（スタッフ情報の対応メニュー。メニュー名がこちらと一致しないときは「全て」のスタッフだけが担当できます）",
+    closed: "受付停止日です", outsideHours: "受付時間の外です", invalid: "内容が正しくありません"
+  };
   function renderLog(log) {
     var box = document.getElementById("hp-log");
     if (!log || !log.length) { box.innerHTML = '<p class="empty">まだ受信はありません。上の受信テストで動作を確認できます。</p>'; return; }
@@ -132,7 +138,7 @@
       var cls = e.result === "受信" ? "res-ok" : e.result === "取消" ? "res-cx" : "res-ng";
       var detail = e.result === "受信"
         ? (e.date + " " + e.time + "／担当:" + esc(e.staff))
-        : e.result === "取消" ? (e.date || "") : ("理由:" + esc(e.error) + (e.time ? "（" + e.date + " " + e.time + "）" : ""));
+        : e.result === "取消" ? (e.date || "") : ("理由:" + esc(HP_REASON[e.error] || e.error) + (e.time ? "（" + e.date + " " + e.time + "）" : ""));
       return "<tr><td>" + esc((e.at || "").replace("T", " ").slice(0, 19)) + "</td>" +
         '<td class="' + cls + '">' + esc(e.result) + "</td>" +
         "<td>" + esc(e.rid || "") + "</td>" +
@@ -249,7 +255,9 @@
         } else {
           out.textContent = res.j.error === "slotTaken"
             ? "この枠はすでに埋まっているため拒否しました（二重予約は起きません）。"
-            : "受信できませんでした（" + (res.j.error || "エラー") + "）。";
+            : res.j.error === "noCapableStaff"
+              ? "このメニューを担当できるスタッフがいないため受け付けませんでした（スタッフ情報の対応メニューを確認してください）。"
+              : "受信できませんでした（" + (HP_REASON[res.j.error] || res.j.error || "エラー") + "）。";
           out.className = "ng";
         }
         loadLog();
