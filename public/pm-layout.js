@@ -4,6 +4,60 @@
   "use strict";
   const WEEK = ["日", "月", "火", "水", "木", "金", "土"];
 
+  // お客様の予約を動かす前に、画像の見本と同じ確認画面で承認を受ける。
+  // OK まで保存しない。キャンセル・Esc・画面を閉じた場合は変更しない。
+  window.__pmConfirmBookingMove = (move, data = window.__pmSchedData) => {
+    if (document.getElementById("pm-move-confirm")) return Promise.resolve(false);
+    const booking = data?.bookings?.find((b) => b.id === move.id);
+    const staffName = (id) => data?.staff?.find((s) => s.id === id)?.name || "";
+    const beforeStaff = data?.assignments?.find((a) => a.booking_id === move.id)?.staff_id;
+    const time = (v) => String(Math.floor(v / 60)).padStart(2, "0") + ":" + String(v % 60).padStart(2, "0");
+    const beforeStart = booking ? (booking.start_at - Date.parse(move.date + "T00:00:00+09:00")) / 60000 : null;
+    const beforeEnd = booking ? (booking.end_at - Date.parse(move.date + "T00:00:00+09:00")) / 60000 : null;
+    const afterTime = time(move.start);
+    const newStaff = staffName(move.staffId);
+    const oldStaff = staffName(beforeStaff);
+    return new Promise((resolve) => {
+      const previousFocus = document.activeElement;
+      const dialog = document.createElement("dialog");
+      dialog.id = "pm-move-confirm";
+      dialog.className = "pm-move-confirm";
+      dialog.setAttribute("aria-labelledby", "pm-move-confirm-title");
+      dialog.setAttribute("aria-describedby", "pm-move-confirm-message");
+      dialog.innerHTML = '<h2 id="pm-move-confirm-title">予約の移動確認</h2>' +
+        '<div class="pm-move-confirm-body"><p class="pm-move-confirm-customer"></p>' +
+        '<p id="pm-move-confirm-message"></p><p class="pm-move-confirm-staff"></p>' +
+        '<div class="pm-move-confirm-actions"><button type="button" class="pm-move-confirm-ok">OK</button>' +
+        '<button type="button" class="pm-move-confirm-cancel" autofocus>キャンセル</button></div></div>';
+      dialog.querySelector(".pm-move-confirm-customer").textContent = booking?.name ? booking.name + " 様" : "";
+      dialog.querySelector("#pm-move-confirm-message").textContent = move.start !== beforeStart
+        ? "開始時間が" + afterTime + "に変更になりますが、よろしいですか？"
+        : move.end !== beforeEnd
+          ? "終了時間が" + time(move.end) + "に変更になりますが、よろしいですか？"
+          : "担当スタッフが変更になりますが、よろしいですか？";
+      const staff = dialog.querySelector(".pm-move-confirm-staff");
+      staff.textContent = booking?.people > 1 && newStaff
+        ? "移動先の担当スタッフ：" + newStaff + "（ほかの担当は空き状況から割り当てます）"
+        : beforeStaff && beforeStaff !== move.staffId && newStaff
+          ? "担当スタッフ：" + (oldStaff || "現在の担当") + " → " + newStaff : "";
+      let settled = false;
+      const finish = (approved) => {
+        if (settled) return;
+        settled = true;
+        if (dialog.open) dialog.close();
+        dialog.remove();
+        if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+        resolve(approved);
+      };
+      dialog.querySelector(".pm-move-confirm-ok").addEventListener("click", () => finish(true));
+      dialog.querySelector(".pm-move-confirm-cancel").addEventListener("click", () => finish(false));
+      dialog.addEventListener("cancel", (ev) => { ev.preventDefault(); finish(false); });
+      dialog.addEventListener("close", () => finish(false));
+      document.body.appendChild(dialog);
+      try { dialog.showModal(); } catch { finish(false); }
+    });
+  };
+
   // 保存APIの応答に warning が含まれていたら管理者に知らせる
   // （例：対応可能メニューから外したメニューの予約が残っている場合）
   const origFetch = window.fetch.bind(window);
@@ -301,7 +355,7 @@
       // 名前の左の帯：管理画面の「スタッフ情報」の性別（読み込む前は従来の名前での判定）
       const female = lockInfo && lockInfo.gender ? lockInfo.gender === "female" : !!d.female;
       row.classList.toggle("pm-acc-f", female);
-      row.classList.toggle("pm-acc-m", !female);
+      row.classList.toggle("pm-acc-m", !female && lockInfo?.gender !== "none");
       row.classList.toggle("pm-blue", !!lockInfo?.locked);
       row.classList.toggle("pm-locked", !!lockInfo?.locked);
       if (lockInfo && !cell.querySelector(".pm-lockbtn")) {
@@ -1323,6 +1377,7 @@
     const id = pd.dataset.mvId;
     if (!staffId || !id || !Number.isFinite(start) || !dur) { alert("移動できる候補がありません。"); return; }
     const version = (window.__pmSchedData?.days || []).find((d) => d.date === date)?.version ?? 0;
+    if (!await window.__pmConfirmBookingMove({ date, id, staffId, start, end: start + dur })) return;
     try {
       const r = await fetch("/api/demo/schedule", {
         method: "POST",
@@ -2704,7 +2759,7 @@
     let pendingSync = false, syncTimer = 0;
     // 入力フォーム（予約・休憩・業務の入力や編集）を開いている間だけ自動更新を保留する
     // （入力中の内容が消えないように）。左パネルを開いているだけ・検索中なら、そのまま更新する
-    const isEditing = () => !!document.querySelector(".ledger-side .ledger-side-form");
+    const isEditing = () => !!document.querySelector(".ledger-side .ledger-side-form, #pm-move-confirm");
     const showPending = (on) => {
       let el = document.getElementById("pm-sync-pending");
       if (!on) { el?.remove(); return; }
@@ -3070,7 +3125,7 @@
 (function () {
   "use strict";
   let base = null, pending = false;
-  const busy = () => !!document.querySelector(".ledger-side-form, section.ledger-shift-detail, #pm-np, .ledger-modal-backdrop, #cn-login-ov") ||
+  const busy = () => !!document.querySelector(".ledger-side-form, section.ledger-shift-detail, #pm-np, .ledger-modal-backdrop, #cn-login-ov, #pm-move-confirm") ||
     !!(document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName));
   async function check() {
     if (document.hidden) return;

@@ -950,6 +950,7 @@ function postSchedule(body) {
       const c = getCourse(course);
       const cbTarget = state.staff.find((s) => s.id === staffId);
       if (!consent || !c || !cbTarget) throw err(400, "invalid");
+      rejectTestData({ name: body.name, email: body.email }); // 本番に試しの予約を入れさせない（管理画面から入れる予約も同じ）
       if (cbTarget.active !== 1) throw err(409, "staffUnavailable"); // 退職・停止中のスタッフには入れられない（移動と同じ）
       if (staffLockedOn(staffId, date)) throw err(409, "staffLocked"); // その日に鍵（予約受付停止）のスタッフには入れられない
       if (!staffCanDo(cbTarget, course)) throw err(409, "soldOut"); // 対応可能メニュー外は不可
@@ -998,6 +999,24 @@ function postSchedule(body) {
       bump();
       return { ok: true };
     }
+    case "purgeTest": {
+      // 試しの予約を、メールを出さずに跡形なく消す（取消とちがい、お客様・店への取消メールも送らない）。
+      // 消せるのは、テストだと分かる予約（お名前に「テスト」・テスト用のメールアドレス）だけ。本物の予約は消せない
+      checkRevision();
+      const ev = ensureEvents(date);
+      const bk = ev.bookings.find((b) => b.id === body.id);
+      if (!bk) throw err(404, "notFound");
+      if (!looksLikeTest(bk)) throw err(409, "notTestBooking");
+      if (bk.ticket_id) throw err(409, "hasTicket"); // 回数券を使った予約は、回数の戻しが要るので取消で扱う
+      ev.bookings = ev.bookings.filter((b) => b.id !== bk.id);
+      ev.assignments = ev.assignments.filter((a) => a.booking_id !== bk.id);
+      state.bookingIndex.delete(bk.id);
+      for (const [k, v] of [...state.requestKeys]) if (JSON.stringify(v || {}).includes(bk.id)) state.requestKeys.delete(k);
+      for (let i = state.mails.length - 1; i >= 0; i--) if (state.mails[i].bookingId === bk.id) state.mails.splice(i, 1);
+      console.log(`試しの予約を消しました: ${bk.id} ${date}（${String(bk.name || "").slice(0, 20)}）`);
+      bump();
+      return { ok: true, purged: bk.id };
+    }
     case "toggle": {
       checkRevision();
       day.enabled = !!body.enabled;
@@ -1006,7 +1025,9 @@ function postSchedule(body) {
     }
     case "staff": {
       const p = body;
-      if (!p.id || !p.name || ![`male`, `female`].includes(p.gender)) throw err(400, "invalid");
+      const prevStaff = state.staff.find((x) => x.id === p.id);
+      const gender = p.gender || prevStaff?.gender || "none";
+      if (!p.id || !String(p.name || "").trim() || !["male", "female", "none"].includes(gender)) throw err(400, "invalid");
       const profile = { ...(p.profile || {}) };
       delete profile.nominationFeePending;
       if (p.photo) {
@@ -1016,7 +1037,6 @@ function postSchedule(body) {
         state.photos.delete(p.id);
         profile.imageKey = "";
       }
-      const prevStaff = state.staff.find((x) => x.id === p.id);
       // 新規スタッフのIDは数字8桁の連番で採番する（ID欄がすべて数字8桁で揃うように）
       let staffRecId = p.id;
       if (!prevStaff) {
@@ -1033,7 +1053,7 @@ function postSchedule(body) {
       const rec = {
         id: staffRecId,
         name: String(p.name),
-        gender: p.gender,
+        gender,
         active: p.active ? 1 : 0,
         locked: 0, // 鍵は日ごと（days[date].locked）
         courses: JSON.stringify(p.allCourses ? [] : p.courses || []),
@@ -2399,6 +2419,27 @@ function courseGender(courseId) {
   return name.includes("女性") ? "female" : name.includes("男性") ? "male" : "none";
 }
 
+// ---- 本番に「試しのデータ」を入れさせない守り ----
+// 2026-10-19、作業中のAIが本番（公開URL）の予約サイトで試しに予約し、本物の予約台帳・店へのメールに
+// 「操作確認 テスト」の予約が混ざった。本番（CLOUD＝ホスティング／Macの本番モード）では、テストだと分かる
+// お名前・メールアドレスの予約・会員登録・回数券購入を受け付けない（本物のお客様が使わないものだけ）。
+// 本番データのコピーで試すとき（本番モードでない起動）は今までどおり使える。どうしても本番で試すときだけ ALLOW_TEST_DATA=1
+const TEST_NAME_RE = /テスト|てすと|ﾃｽﾄ|ダミー|(^|[^a-z])(test|dummy)([^a-z]|$)/i;
+function isTestMail(email) {
+  const d = String(email || "").trim().toLowerCase().split("@")[1] || "";
+  if (!d) return false;
+  // 例示・テスト専用として予約されていて、実在しないメールアドレス（RFC 2606 / 6761）
+  return /^example\.(com|net|org|jp|co\.jp)$/.test(d) || /\.(example|test|invalid|localhost)$/.test(d) ||
+    ["example", "test", "invalid", "localhost"].includes(d);
+}
+function looksLikeTest(who) {
+  return TEST_NAME_RE.test(String(who?.name || "")) || isTestMail(who?.email);
+}
+const BLOCK_TEST_DATA = IS_CLOUD && process.env.ALLOW_TEST_DATA !== "1";
+function rejectTestData(who) {
+  if (BLOCK_TEST_DATA && looksLikeTest(who)) throw err(400, "testDataNotAllowed");
+}
+
 function staffCanDo(st, courseId) {
   const list = JSON.parse(st.courses || "[]");
   return list.length === 0 || list.includes(courseId);
@@ -2867,6 +2908,7 @@ function createPublicBooking(body, member) {
   if (!course || !/^\d{4}-\d{2}-\d{2}$/.test(date || "") || !(people >= 1 && people <= 3) ||
       body.consent !== true || !String(body.name || "").trim() || !String(body.email || "").trim() ||
       !String(body.phone || "").trim()) throw err(400, "invalid");
+  rejectTestData({ name: body.name, email: body.email }); // 本番に試しの予約を入れさせない
   // フリーメッセージ欄の設定（表示・必須・文字数）はサーバー側でも強制する
   const fm = state.settings.freeMessage;
   let comment = fm.visible ? String(body.comment || "").slice(0, fm.maxLength || 2000) : "";
@@ -3935,6 +3977,7 @@ function handleDemoApi(req, res, url) {
         const name = String(b.name || (member ? member.name : "") || "").trim().slice(0, 120);
         const email = member ? member.email : String(b.email || "").trim().toLowerCase().slice(0, 254);
         if (!plan || plan.active !== 1 || !name || !email.includes("@")) throw err(400, "invalid");
+        rejectTestData({ name, email }); // 本番に試しの回数券購入を入れさせない
         // 会員のみ購入可（ログイン中の会員、または予約実績のあるメールアドレス）。
         // 画面の表示制御だけに頼らず、サーバー側で必ず確認する
         if (!member && !isRepeatEmail(email)) throw err(403, "memberOnly");
@@ -4079,6 +4122,7 @@ function handleDemoApi(req, res, url) {
         }
       } else {
         // 新規会員登録（メールアドレスとパスワードが揃えばそのまま会員になる）
+        rejectTestData({ name: b.name, email }); // 本番に試しの会員を作らせない
         if (pass.length < 6) throw err(400, "shortPass");
         m = { email, pass: hashPass(pass), name: String(b.name || "").trim().slice(0, 120),
           phone: String(b.phone || "").trim().slice(0, 40), createdAt: Date.now(), bookings: [], tickets: [],
@@ -4495,7 +4539,7 @@ function handleDemoApi(req, res, url) {
         const body = JSON.parse(raw || "{}");
         // スタッフマスタの編集（登録・削除）と、失敗メールのまとめての再送はマネージャー以上のみ。
         // 予約・シフト・受付停止などの日常操作はスタッフ権限でも可能
-        if ((body.action === "staff" || body.action === "staffDelete" || body.action === "retryMail") && !roleAtLeast(req, "manager")) {
+        if ((body.action === "staff" || body.action === "staffDelete" || body.action === "retryMail" || body.action === "purgeTest") && !roleAtLeast(req, "manager")) {
           const a = sessionAccount(req);
           authLogPush({ kind: "api", user: a ? a.user : "", ok: false, path: "/api/demo/schedule#" + body.action, ip: req.clientIp || req.socket.remoteAddress || "" });
           denyApi(req, res);

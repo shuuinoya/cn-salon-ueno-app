@@ -1932,3 +1932,36 @@ main.ledger-app .ledger-track::after {
 main.ledger-app .ledger-grid-head, main.ledger-app .ledger-grid-head .ledger-staff-cell { background: #a9a9a9 !important; border-left-color: #a9a9a9 !important; }
 main.ledger-app .ledger-hours b { background: #7a7a7a; }
 main.ledger-app .ledger-overview > button:not(.pm-now) { background: #f7f7f7; }
+
+/* 予約の移動確認（OK の前は保存しない） */
+dialog.pm-move-confirm {
+  box-sizing: border-box; width: min(480px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px); padding: 5px; margin: auto;
+  overflow: auto; border: 3px solid #a8744c; border-radius: 6px;
+  background: #fff; color: #252525; font-family: inherit;
+  box-shadow: 0 8px 28px rgb(0 0 0 / 18%);
+}
+dialog.pm-move-confirm::backdrop { background: rgb(0 0 0 / 30%); }
+.pm-move-confirm h2 {
+  margin: 0; padding: 16px 28px; border-radius: 6px; background: #ffdf9a;
+  color: #302c28; font-size: 26px; line-height: 1.4; font-weight: 700;
+}
+.pm-move-confirm-body { padding: 12px 22px 10px; }
+.pm-move-confirm-customer { margin: 0 0 6px; font-size: 16px; overflow-wrap: anywhere; }
+.pm-move-confirm-customer:empty, .pm-move-confirm-staff:empty { display: none; }
+.pm-move-confirm #pm-move-confirm-message { margin: 0; font-size: 24px; line-height: 1.55; }
+.pm-move-confirm-staff { margin: 10px 0 0; font-size: 16px; overflow-wrap: anywhere; }
+.pm-move-confirm-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 24px; margin-top: 12px; }
+.pm-move-confirm-actions button {
+  padding: 10px 14px; min-height: 56px; border: 1px solid #a8744c; border-radius: 6px;
+  color: #303030; background: #f5efe9; font: inherit; font-size: 24px; cursor: pointer;
+  touch-action: manipulation;
+}
+.pm-move-confirm-actions .pm-move-confirm-ok { background: #ff5257; border-color: #ff5257; color: #fff; }
+.pm-move-confirm-actions button:focus-visible { outline: 3px solid #326cb4; outline-offset: 3px; }
+@media (max-width: 480px) {
+  .pm-move-confirm h2 { padding: 12px 16px; font-size: 23px; }
+  .pm-move-confirm-body { padding: 12px; }
+  .pm-move-confirm #pm-move-confirm-message, .pm-move-confirm-actions button { font-size: 21px; }
+  .pm-move-confirm-actions { gap: 16px; }
+}

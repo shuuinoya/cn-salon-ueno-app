@@ -194,7 +194,6 @@
   const list = document.getElementById("st-list");
   let staff = null;
   let failed = false;
-  const gender = (s) => T(s.gender === "female" ? "女性スタッフ" : "男性スタッフ");
 
   function card(s) {
     const name = esc(s.name);
@@ -202,7 +201,7 @@
     return '<article class="st-item">' +
       '<button type="button" class="st-photo" data-id="' + esc(s.id) + '" aria-label="' + name + '">' + (s.photo ? '<img src="' + esc(s.photo) + '" alt="" loading="lazy" decoding="async"/>' : USER) + "</button>" +
       '<div class="st-body">' +
-      '<div class="st-head"><h3 class="st-name">' + name + '</h3><span class="st-gender">' + esc(gender(s)) + "</span></div>" +
+      '<div class="st-head"><h3 class="st-name">' + name + "</h3></div>" +
       '<p class="st-fee">' + esc(T("指名料")) + " <b>" + esc(price(s.nominationFee)) + "</b></p>" +
       (m ? '<p class="st-msg">' + esc(m) + '</p><button type="button" class="st-more" data-id="' + esc(s.id) + '" hidden></button>' : "") +
       '<div class="st-actions"><a class="booking-button st-book" href="/book?staffId=' + encodeURIComponent(s.id) + '">' + esc(T("指名して予約する")) + "</a></div>" +
@@ -235,7 +234,7 @@
       '<button type="button" class="st-d-close" aria-label="' + esc(T("閉じる")) + '">×</button>' +
       '<div class="st-d-photo">' + (s.photo ? '<img src="' + esc(s.photo) + '" alt="' + name + '"/>' : USER) + "</div>" +
       '<div class="st-d-body">' +
-      '<div class="st-head"><h3 id="st-d-name" class="st-d-name">' + name + '</h3><span class="st-gender">' + esc(gender(s)) + "</span></div>" +
+      '<div class="st-head"><h3 id="st-d-name" class="st-d-name">' + name + "</h3></div>" +
       '<p class="st-fee">' + esc(T("指名料")) + " <b>" + esc(price(s.nominationFee)) + "</b></p>" +
       (m ? '<p class="st-d-msg">' + esc(m) + "</p>" : "") +
       '<div class="st-d-actions"><a class="booking-button st-book" href="/book?staffId=' + encodeURIComponent(s.id) + '">' + esc(T("指名して予約する")) + "</a></div>" +
