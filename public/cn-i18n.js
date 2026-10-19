@@ -17,6 +17,8 @@
 
   /* 辞書 */
   const D = {
+    "このメニューは対応していません。対応メニューを選ぶ": ["Not available for this treatment. Choose an available treatment.","无法提供此项目。请选择可提供的项目。","이 메뉴는 담당하지 않습니다. 가능한 메뉴를 선택하세요.","Ce soin n’est pas disponible avec ce praticien. Choisissez un soin disponible.","Este tratamiento no está disponible con este terapeuta. Elija uno disponible.","Questo trattamento non è disponibile con questo terapista. Scegli un trattamento disponibile.","Diese Behandlung ist bei dieser Fachkraft nicht verfügbar. Wählen Sie eine verfügbare Behandlung."],
+
     // ---- 予約フォーム・回数券（booking-tweaks.js）----
     "（必須）": ["(required)", "（必填）", "(필수)", "(obligatoire)", "(obligatorio)", "(obbligatorio)", "(Pflichtfeld)"],
     "回数券の残り回数が0のため、ご予約いただけません。": [

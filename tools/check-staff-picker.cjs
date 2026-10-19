@@ -1,0 +1,30 @@
+'use strict';
+// Only public staff profiles are copied; all schedules and reservations are synthetic.
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),Module=require('node:module');
+process.env.DEMO_EPHEMERAL='1';process.env.HP_MAIL='0';
+for(const k of Object.keys(process.env))if(/^(MAIL_|GH_)/.test(k))delete process.env[k];
+const root=path.resolve(__dirname,'..');assert.equal(fs.existsSync(path.join(root,'mail-config.json')),false);
+const mod=new Module(path.join(root,'demo-api.js'));mod.filename=path.join(root,'demo-api.js');mod.paths=Module._nodeModulePaths(root);
+mod._compile(fs.readFileSync(mod.filename,'utf8')+'\nmodule.exports.checks={state,getAvailability,minToMs,todayJst,addDays};',mod.filename);
+(async()=>{await mod.exports.ready;
+ const {state,getAvailability,minToMs,todayJst,addDays}=mod.exports.checks;
+ state.mailRelay={url:'',secret:''};state.mails=[];
+ const publicRows=JSON.parse(fs.readFileSync(process.argv[2],'utf8')).staff;
+ state.staff=publicRows.map((s,i)=>({id:s.id,name:s.name,gender:s.gender,active:1,locked:0,sort_order:i,courses:JSON.stringify(s.courses),profile:JSON.stringify({personalNomination:true,nominationFee:s.nominationFee,message:s.message,email:'private@example.test'})}));
+ const date=addDays(todayJst(),1),target=state.staff.find(s=>s.name==='豊'),other=state.staff.find(s=>s.name==='高橋');
+ assert.ok(target&&other);state.days=new Map();state.shifts=new Map();state.events=new Map();
+ for(let i=0;i<7;i++){const d=addDays(date,i);state.shifts.set(d,[]);state.events.set(d,{bookings:[],blocks:[],assignments:[]});}
+ const query=(id,course='364321-4822710')=>getAvailability(new URLSearchParams({course,date,people:'1',staff:'none',staffId:id||''}));
+ const all=query('');assert.equal(all.staffDirectory.length,publicRows.length);assert.equal(all.staff.length,5);
+ assert.ok(all.staffDirectory.find(s=>s.id===other.id).eligible===false);
+ assert.doesNotMatch(JSON.stringify(all),/private@example|imageKey|employeeNumber/);
+ for(const s of state.staff)assert.ok(query(s.id).days.every(d=>d.slots.every(s=>!s.available)),'No configured shift must mean unavailable');
+ state.shifts.set(date,[{staff_id:target.id,date,start_at:minToMs(date,600),end_at:minToMs(date,900)}]);
+ state.events.set(date,{blocks:[{staff_id:target.id,start_at:minToMs(date,660),end_at:minToMs(date,690)}],bookings:[{id:'demo-booking',name:'【デモテスト】時間帯確認',status:'confirmed',start_at:minToMs(date,750),end_at:minToMs(date,810)}],assignments:[{booking_id:'demo-booking',staff_id:target.id}]});
+ const slots=query(target.id,'364326-4822708').days[0].slots,available=m=>slots.find(s=>s.minute===m)?.available;
+ for(const m of [600,690,810,840])assert.equal(available(m),true,'Valid full-duration slot '+m);
+ for(const m of [610,660,700,750,800,850,900])assert.equal(available(m),false,'Break, appointment or shift boundary '+m);
+ assert.ok(query(other.id).days[0].slots.every(s=>!s.available));
+ assert.equal(state.mails.length,0);
+ console.log('PASS: '+publicRows.length+' public staff; all profiles, menu eligibility, no-shift closure, 60-minute shift/break/booking boundaries; no mail');
+})().then(()=>process.exit(0),e=>{console.error(e);process.exit(1)});

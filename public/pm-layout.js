@@ -900,17 +900,10 @@
   // 左上のロゴ：元サイトの5枚花びらは見せず、最初からログイン画面と同じ4枚花びら（白）にする
   // （文字の✿は環境によって色付き絵文字で表示されてしまうため、SVGで描く）
   function decorateLogo() {
-    // どの画面・どの操作の後でも必ずクローバーにする。
-    // Reactが中身を描き直して元の桜マークに戻っても、次の描画サイクルで即置き換える
-    document.querySelectorAll(".ledger-logo").forEach((logo) => {
-      if (logo.querySelector("svg.pm-clover")) return;
-      logo.dataset.pmFlower = "1";
-      logo.textContent = "";
-      logo.innerHTML =
-        '<svg class="pm-clover" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true" focusable="false">' +
-        '<path fill="#fff" d="M12 12C-3 13 0-3 9 1c3 1 3 7 3 11ZM12 12C11-3 27 0 23 9c-1 3-7 3-11 3ZM12 12c15-1 12 15 3 11-3-1-3-7-3-11ZM12 12c1 15-15 12-11 3 1-3 7-3 11-3Z"/>' +
-        "</svg>";
-    });
+    // 左上のロゴは CSS（pm-layout.css の .ledger-logo::before）でクローバーを出す。
+    // 以前はロゴの中身（Reactが描くマーク）を差し替えていたため、スタッフ情報などから台帳へ戻るときに
+    // Reactが自分のマークを消せずに画面全体が止まっていた（"This page couldn't load"）。中身には触らない
+    document.querySelectorAll(".ledger-logo").forEach((logo) => { if (!logo.dataset.pmFlower) logo.dataset.pmFlower = "1"; });
   }
 
   // 表示中の日付のスケジュール全体（予約・業務・担当）を取得して共有する
@@ -929,6 +922,45 @@
       window.__pmSchedData = d;
     } catch {}
   }
+
+  // 台帳データが届いたら（cn-fast.js が、台帳の本体が受け取る前に知らせる）、表示中の日のデータとしてそのまま使う。
+  // これまでは別に同じデータを取り直し、0.6秒ごとの見回りで整えていたため、日付を変えると枠の見た目が1秒ほど遅れて整っていた。
+  // あわせて前後の日を先読みして、日付を切り替えたら待たずに出せるようにする
+  const onApi = (e) => {
+    const { path, search, text } = e.detail || {};
+    const date = new URLSearchParams(search || "").get("date");
+    if (!date) return;
+    const shown = document.querySelector(".ledger-date-trigger time")?.getAttribute("datetime");
+    if (path === "/api/demo/schedule") {
+      if (shown && shown !== date) return; // 先読みした前後の日のデータは、表示中の日のデータにしない
+      let d;
+      try { d = JSON.parse(text); } catch { return; }
+      d.__date = date;
+      const changed = window.__pmSchedFor !== date;
+      window.__pmSchedData = d;
+      window.__pmSchedAt = Date.now();
+      window.__pmSchedFor = date;
+      // 同じ日の取り直しなら今の枠をすぐ整える。日付が変わったときは、台帳の本体が新しい枠を描いた瞬間に
+      // （画面に出る前に）見張り役（__pmPanelObs）が整える。古い日の枠を新しい日のデータで整えてしまわないように
+      if (!changed) decorateEvents();
+      if (changed) {
+        if (window.__pmLocksFor !== date) refreshLocks(true);
+        prefetchNear(date);
+      }
+    }
+  };
+  const prefetchNear = (date) => {
+    if (!date) return;
+    const add = (n) => new Date(Date.parse(date + "T00:00:00Z") + n * 86400e3).toISOString().slice(0, 10);
+    const near = [add(1), add(-1), add(2)];
+    window.__cnPrefetch?.(near.map((x) => "/api/demo/schedule?date=" + x).concat(near.slice(0, 2).map((x) => "/api/demo/locks?date=" + x)));
+  };
+  window.addEventListener("cn:api", onApi);
+  // この上書きより先に届いていた台帳データ（ページを開いた直後）も使う
+  // （この上書きの準備がすべて整ってから使う）
+  setTimeout(() => { if (window.__cnLastApi && window.__cnLastApi["/api/demo/schedule"]) onApi({ detail: window.__cnLastApi["/api/demo/schedule"] }); }, 0);
+  // 「変わった」合図の接続が整った（番号が分かった）ら、表示中の日の前後を先読みする
+  window.addEventListener("cn:seq", () => prefetchNear(document.querySelector(".ledger-date-trigger time")?.getAttribute("datetime")));
 
   const pmMin = (dateStr, ms) => Math.round((ms - Date.parse(dateStr + "T00:00:00+09:00")) / 60000);
   const pmHM = (min) => String(Math.floor((min % 1440) / 60)).padStart(2, "0") + ":" + String(min % 60).padStart(2, "0");

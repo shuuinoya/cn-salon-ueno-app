@@ -2561,6 +2561,17 @@ function nominatableStaff(courseId, genderPref) {
     });
 }
 
+// プロフィールは全員を案内する。予約できるかは選択メニューと勤務予定で別に判定する。
+function staffPickerDirectory(courseId, genderPref) {
+  const eligible = new Set(nominatableStaff(courseId, genderPref).map(s => s.id));
+  return state.staff.filter(st => st.active === 1 && profileOf(st).personalNomination)
+    .sort((a,b) => a.sort_order - b.sort_order).map(st => {
+      const pr = profileOf(st);
+      return { id:st.id, name:pr.nickname || st.name, nominationFee:Number(pr.nominationFee) || 0,
+        revision:st.profile_revision || 0, hasPhoto:state.photos.has(st.id), message:pr.message || '', eligible:eligible.has(st.id) };
+    });
+}
+
 // 指定時間帯に施術できるスタッフID一覧
 // 対応メニュー→シフト内→休憩・業務→既存予約→受付停止（鍵）をすべて満たす人だけを返す
 function freeStaffIds(date, startMin, endMin, courseId, genderPref, ignoreBookingId) {
@@ -2916,7 +2927,7 @@ function getAvailability(q, member) {
     }
     days.push({ date: d, enabled: day.enabled, slots });
   }
-  return { staff: nominatableStaff(courseId, gpref), days };
+  return { staff: nominatableStaff(courseId, gpref), staffDirectory: staffPickerDirectory(courseId, gpref), days };
 }
 
 // 同じメールアドレスの予約が既にあれば「リピート」扱いにする
